@@ -1,8 +1,26 @@
 # MapleLegends Boss Timer
 
+[![Release](https://img.shields.io/github/v/release/superjump22/mlboss-timer?style=flat-square&color=4ade80)](https://github.com/superjump22/mlboss-timer/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square)](https://github.com/superjump22/mlboss-timer/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-gray?style=flat-square)](#license)
+
 MapleLegends（冒险岛私服）副本 Boss 技能计时器客户端：悬浮窗计时面板 + bossassis 房间同步（队友可用官方网页版同房间互通）。
 
 当前支持副本：AUF（更多副本开发中）。
+
+## 界面预览
+
+### 悬浮窗 · 游戏内计时
+
+![Overlay](docs/screenshots/overlay.png)
+
+覆盖在游戏画面上方：主体/分身分组计时，倒计时警示红闪、就绪提示，锁定后点击穿透不挡操作，跟随游戏窗口移动并等比例缩放。
+
+### 主客户端 · 管理中心
+
+![Main](docs/screenshots/main.png)
+
+建房/加入房间、房间码复制、回到游戏；就绪提示（语音/提示音/静音）、透明度、缩放、语言等设置；版本更新检查。
 
 ## 功能
 
