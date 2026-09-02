@@ -44,9 +44,11 @@ const announced = new Set();
 const soundMode = ref(localStorage.getItem("soundMode") || "beep");
 const panelOpacity = ref(parseFloat(localStorage.getItem("panelOpacity") || "0.85"));
 const uiScale = ref(parseFloat(localStorage.getItem("uiScale") || "1"));
-// 游戏缩放系数 (Rust 下发 = 游戏客户区宽/1600); 面板总 zoom = uiScale × gameFactor
+// 游戏缩放系数 (Rust 下发 = 游戏客户区宽/1600); 面板总 zoom = uiScale × gameFactor × 0.8
+// (0.8 = 基准校准: 用户调定的标准 100% 大小)
+const BASE_SIZE_FACTOR = 0.8;
 const gameFactor = ref(1);
-const panelZoom = computed(() => uiScale.value * gameFactor.value);
+const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FACTOR);
 function reloadAppearance() {
   reloadLocale(); // 语言跟随主窗口设置
   soundMode.value = localStorage.getItem("soundMode") || "beep";
