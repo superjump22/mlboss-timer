@@ -445,9 +445,10 @@ fn spawn_tracker(app: tauri::AppHandle, state: Arc<AppState>) {
             diag_ticks += 1;
 
             let Some(win) = app.get_webview_window("overlay") else {
-                // 悬浮窗不存在: 清状态等待重建
+                // 悬浮窗不存在: 清状态, 并重置 last_factor 使重建时必发 panel_scale
                 last_client = None;
                 last_h = 0;
+                last_factor = 0.0;
                 continue;
             };
 

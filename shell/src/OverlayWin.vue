@@ -271,13 +271,14 @@ onMounted(async () => {
         await listen("settings-changed", reloadAppearance)
       );
       // 主动拉取缩放系数: 悬浮窗创建时 WebView 未就绪, panel_scale 事件可能已丢失
-      // (拉取后由 watch 统一触发尺寸上报, 不手动调用)
       try {
         const f = await window.__TAURI__.core.invoke("get_panel_scale");
         if (typeof f === "number" && f > 0) gameFactor.value = f;
       } catch {
-        /* 拉取失败保持 1, 事件会兜底 */
+        /* 旧版壳无此命令: 保持 1, 等事件兜底 */
       }
+      // 拉取值与当前相同时 watch 不触发, 强制上报一次 (双 rAF 保证测量时序)
+      reportBaseSize();
       pushRegionsNow();
     } catch (err) {
       console.error(err);
