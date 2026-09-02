@@ -266,6 +266,13 @@ onMounted(async () => {
       unlisteners.push(
         await listen("settings-changed", reloadAppearance)
       );
+      // 主动拉取缩放系数: 悬浮窗创建时 WebView 未就绪, panel_scale 事件可能已丢失
+      try {
+        const f = await window.__TAURI__.core.invoke("get_panel_scale");
+        if (typeof f === "number" && f > 0) gameFactor.value = f;
+      } catch {
+        /* 拉取失败保持 1, 事件会兜底 */
+      }
       reportBaseSize();
       pushRegionsNow();
     } catch (err) {

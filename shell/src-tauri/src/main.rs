@@ -199,6 +199,21 @@ async fn set_panel_base(
     Ok(())
 }
 
+/// 悬浮窗前端就绪后主动拉取缩放系数 (panel_scale 事件可能在 WebView 加载完成前已发出而丢失)
+#[tauri::command]
+async fn get_panel_scale(state: tauri::State<'_, Arc<AppState>>) -> Result<f64, String> {
+    #[cfg(windows)]
+    {
+        let h = *state.game_hwnd.lock().unwrap();
+        if h != 0 {
+            if let Some(c) = game_client_rect(h) {
+                return Ok(c.w.max(1) as f64 / BASE_GAME_W);
+            }
+        }
+    }
+    Ok(1.0)
+}
+
 /// 光标在窗口客户区内的物理像素坐标 (不在窗口内返回 None)
 #[cfg(windows)]
 fn cursor_client_pos(win: &tauri::WebviewWindow) -> Option<(i32, i32)> {
@@ -621,6 +636,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             set_hit_regions,
             set_panel_base,
+            get_panel_scale,
             focus_game,
             select_game_window,
             set_window_size,
