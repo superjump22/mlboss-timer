@@ -10,17 +10,16 @@ MapleLegends（冒险岛私服）副本 Boss 技能计时器客户端：悬浮�
 
 ## 界面预览
 
-### 悬浮窗 · 游戏内计时
-
-![Overlay](docs/screenshots/overlay.png)
-
-覆盖在游戏画面上方：主体/分身分组计时，倒计时警示红闪、就绪提示，锁定后点击穿透不挡操作，跟随游戏窗口移动并等比例缩放。
-
-### 主客户端 · 管理中心
-
-![Main](docs/screenshots/main.png)
-
-建房/加入房间、房间码复制、回到游戏；就绪提示（语音/提示音/静音）、透明度、缩放、语言等设置；版本更新检查。
+<table>
+  <tr>
+    <td><img src="docs/screenshots/overlay.png" width="380" alt="悬浮窗 · 游戏内计时"/></td>
+    <td><img src="docs/screenshots/main.png" width="380" alt="主客户端 · 管理中心"/></td>
+  </tr>
+  <tr>
+    <td align="center">悬浮窗 · 游戏内计时</td>
+    <td align="center">主客户端 · 管理中心</td>
+  </tr>
+</table>
 
 ## 功能
 
