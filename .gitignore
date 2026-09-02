@@ -1,0 +1,22 @@
+# 依赖与构建产物
+node_modules/
+dist/
+shell/src-tauri/target/
+shell/src-tauri/gen/
+
+# 本地配置与状态 (含调试 URL/键位等本机信息)
+*.local
+.env
+
+# 设计文档 / 内部资料 (不入库)
+docs/
+*.md
+!README.md
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志与临时
+*.log
+_archive/

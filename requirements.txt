@@ -1,0 +1,3 @@
+# 仅语音生成脚本需要 (scripts/gen_voices.py); 客户端是 Rust+Node, 无 Python 依赖
+edge-tts
+miniaudio
