@@ -13,6 +13,12 @@ MapleLegends（冒险岛私服）副本 Boss 技能计时器客户端：悬浮�
 - 系统托盘常驻，界面透明度/缩放可调，中英文切换
 - UI 热更新（EdgeOne Pages）+ 客户端更新检查（GitHub Releases）
 
+## 下载
+
+从 [Releases](https://github.com/superjump22/mlboss-timer/releases/latest) 下载最新版安装包。
+
+> 下载时浏览器/系统可能提示"危险文件"：安装包未做代码签名（个人开发者证书成本高），属正常现象，选择"保留 / 仍要保留"即可。不放心可先上传 [VirusTotal](https://www.virustotal.com) 自行核验。
+
 ## 开发
 
 ```
