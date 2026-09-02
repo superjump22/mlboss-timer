@@ -370,7 +370,8 @@ fn version_gt(a: &str, b: &str) -> bool {
     false
 }
 
-/// 检查 GitHub 最新 release (走系统代理); 返回最新版本号/下载页/是否有更新
+/// 检查最新版本: 走 releases/latest 重定向 (不走 GitHub API — 匿名 API 限流 60/h,
+/// 共享代理出口 IP 极易耗尽; 重定向探测无限制), reqwest 自动跟随重定向后读最终 URL
 #[tauri::command]
 async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     if UPDATE_REPO.starts_with("REPLACE_ME") {
@@ -387,17 +388,26 @@ async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     }
     let client = builder.build().map_err(|e| e.to_string())?;
     let resp = client
-        .get(format!("https://api.github.com/repos/{UPDATE_REPO}/releases/latest"))
+        .get(format!("https://github.com/{UPDATE_REPO}/releases/latest"))
         .send()
         .await
         .map_err(|e| format!("请求失败: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("GitHub API {}", resp.status()));
+        return Err(format!("GitHub {}", resp.status()));
     }
-    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let version = json["tag_name"].as_str().unwrap_or("").trim_start_matches('v').to_string();
-    let url = json["html_url"].as_str().unwrap_or("").to_string();
-    let has_update = !version.is_empty() && version_gt(&version, &current);
+    // 跟随重定向后的最终 URL: .../releases/tag/vX.Y.Z
+    let final_url = resp.url().to_string();
+    let version = final_url
+        .rsplit("/tag/")
+        .next()
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+    if version.is_empty() || !version.contains('.') {
+        return Err(format!("无法解析版本号: {final_url}"));
+    }
+    let url = format!("https://github.com/{UPDATE_REPO}/releases/latest");
+    let has_update = version_gt(&version, &current);
     log(&format!("更新检查: 当前 {current}, 最新 {version}, has_update={has_update}"));
     Ok(UpdateInfo { version, url, has_update })
 }

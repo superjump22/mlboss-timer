@@ -279,6 +279,9 @@ onMounted(async () => {
         <button v-else-if="updateState === 'done'" class="muted plain">
           {{ t("upToDate") }}
         </button>
+        <button v-else-if="updateState === 'error'" class="muted plain">
+          {{ t("checkFailed") }}
+        </button>
         <span class="flex1"></span>
         <button class="btn ghost sm" :disabled="updateState === 'checking'" @click="doCheckUpdate">
           {{ updateState === "checking" ? t("checking") : t("checkUpdate") }}
