@@ -170,6 +170,14 @@ function openDownload() {
 onMounted(async () => {
   preloadVoices();
   doCheckUpdate(); // 启动检查 (静默: 失败不打扰)
+  // 主窗口高度按内容自适应 (宽度固定 520)
+  requestAnimationFrame(() => {
+    const el = document.querySelector(".content");
+    if (el) {
+      const h = Math.ceil(el.getBoundingClientRect().height) + 40;
+      invoke("set_window_size", { width: 520, height: Math.max(400, h) });
+    }
+  });
   if (isTauri) {
     try {
       const { listen } = window.__TAURI__.event;
@@ -188,6 +196,29 @@ onMounted(async () => {
 <template>
   <div class="mainwin">
     <div class="content">
+      <!-- 版本与更新 (置顶, 永远首屏可见) -->
+      <div class="versionrow">
+        <span class="muted">v{{ version }}</span>
+        <button
+          v-if="updateInfo?.has_update"
+          class="pill ok updatepill"
+          :title="updateInfo.url"
+          @click="openDownload"
+        >
+          {{ t("newVersion") }} v{{ updateInfo.version }} · {{ t("download") }}
+        </button>
+        <button v-else-if="updateState === 'done'" class="muted plain">
+          {{ t("upToDate") }}
+        </button>
+        <button v-else-if="updateState === 'error'" class="muted plain">
+          {{ t("checkFailed") }}
+        </button>
+        <span class="flex1"></span>
+        <button class="btn ghost sm" :disabled="updateState === 'checking'" @click="doCheckUpdate">
+          {{ updateState === "checking" ? t("checking") : t("checkUpdate") }}
+        </button>
+      </div>
+
       <!-- 计时器列表 (未来扩展: HT 等副本卡片) -->
       <div class="section">
         <div class="secTitle">{{ t("timersSection") }}</div>
@@ -263,29 +294,6 @@ onMounted(async () => {
             <button class="btn ghost sm" @click="resetDefaults">{{ t("resetDefaults") }}</button>
           </div>
         </div>
-      </div>
-
-      <!-- 版本与更新 -->
-      <div class="versionrow">
-        <span class="muted">v{{ version }}</span>
-        <button
-          v-if="updateInfo?.has_update"
-          class="pill ok updatepill"
-          :title="updateInfo.url"
-          @click="openDownload"
-        >
-          {{ t("newVersion") }} v{{ updateInfo.version }} · {{ t("download") }}
-        </button>
-        <button v-else-if="updateState === 'done'" class="muted plain">
-          {{ t("upToDate") }}
-        </button>
-        <button v-else-if="updateState === 'error'" class="muted plain">
-          {{ t("checkFailed") }}
-        </button>
-        <span class="flex1"></span>
-        <button class="btn ghost sm" :disabled="updateState === 'checking'" @click="doCheckUpdate">
-          {{ updateState === "checking" ? t("checking") : t("checkUpdate") }}
-        </button>
       </div>
     </div>
   </div>
