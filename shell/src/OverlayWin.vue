@@ -52,7 +52,7 @@ function reloadAppearance() {
   soundMode.value = localStorage.getItem("soundMode") || "beep";
   panelOpacity.value = parseFloat(localStorage.getItem("panelOpacity") || "0.85");
   uiScale.value = parseFloat(localStorage.getItem("uiScale") || "1");
-  reportBaseSize();
+  // 尺寸上报由 watch(uiScale) 统一触发, 不手动调用 (避免 DOM 未 flush 测量旧值)
 }
 
 // ---- 计时操作 ----
@@ -221,17 +221,21 @@ function onCellsDown() {
 
 // ---- 上报面板渲染尺寸 (gBCR, 已含 zoom) ----
 // 尺寸闭环: Rust 下发 gameFactor → 前端 zoom 面板 → 上报渲染尺寸 → Rust 设窗口大小
+// 双重 rAF 确保测量发生在 zoom 应用+浏览器渲染之后
 async function reportBaseSize() {
   await nextTick();
   requestAnimationFrame(() => {
-    const el = document.querySelector(".panel");
-    if (el) {
-      const r = el.getBoundingClientRect();
-      invoke("set_panel_base", { width: Math.ceil(r.width), height: Math.ceil(r.height) });
-    }
+    requestAnimationFrame(() => {
+      const el = document.querySelector(".panel");
+      if (el) {
+        const r = el.getBoundingClientRect();
+        invoke("set_panel_base", { width: Math.ceil(r.width), height: Math.ceil(r.height) });
+      }
+    });
   });
 }
-watch([locked, uiScale, gameFactor, locale, () => gameWins.value.length], reportBaseSize);
+// 所有尺寸相关变化 (含 mount 时拉取的 gameFactor) 统一走 watch, 不手动调用避免竞态
+watch([locked, uiScale, gameFactor, locale, () => gameWins.value.length], reportBaseSize, { flush: "post" });
 
 // ---- 生命周期 ----
 let unlisteners = [];
@@ -267,13 +271,13 @@ onMounted(async () => {
         await listen("settings-changed", reloadAppearance)
       );
       // 主动拉取缩放系数: 悬浮窗创建时 WebView 未就绪, panel_scale 事件可能已丢失
+      // (拉取后由 watch 统一触发尺寸上报, 不手动调用)
       try {
         const f = await window.__TAURI__.core.invoke("get_panel_scale");
         if (typeof f === "number" && f > 0) gameFactor.value = f;
       } catch {
         /* 拉取失败保持 1, 事件会兜底 */
       }
-      reportBaseSize();
       pushRegionsNow();
     } catch (err) {
       console.error(err);
