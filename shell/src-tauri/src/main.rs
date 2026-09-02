@@ -26,8 +26,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const GAME_CLASS: &str = "MapleStoryClass"; // Phase 0 实测的窗口类名
 const TRACK_MS: u64 = 16; // 高频轮询保证跟随流畅 (~60fps)
-// 前端地址: 开发=vite dev; 上线后换成 EdgeOne Pages 域名 (TODO)
-const DEFAULT_URL: &str = "http://localhost:5173";
+// 前端地址: 线上 EdgeOne Pages (发版即全员热更新); 本地开发时改回 http://localhost:5173
+const DEFAULT_URL: &str = "https://mlboss-timer-dpsnvkw52h0w.edgeone.dev/";
 
 struct AppState {
     game_hwnd: Mutex<isize>,
@@ -572,18 +572,29 @@ fn main() {
     log("=== 启动 ===");
 
     let mut persisted = load_state_file();
-    // v3 迁移: 位置从绝对像素 (rel_x/rel_y) 改为比例 (rel_rx/rel_ry), 旧数据丢弃回默认
+    // v3 迁移: 位置从绝对像素 (rel_x/rel_y) 改为比例 (rel_rx/rel_ry), 旧数据丢弃回默认;
+    // 并移除调试用 url 覆盖 (1.0 起统一走线上 EdgeOne Pages)
     if persisted.get("v").and_then(|v| v.as_i64()) != Some(3) {
         if let Some(obj) = persisted.as_object_mut() {
             obj.remove("rel_x");
             obj.remove("rel_y");
+            obj.remove("url");
             obj.insert("v".to_string(), serde_json::json!(3));
         } else {
             persisted = serde_json::json!({ "v": 3 });
         }
         save_state_file(&persisted);
-        log("状态文件升级 v3: 面板位置改比例存储");
+        log("状态文件升级 v3: 面板位置改比例存储, 移除 url 覆盖");
     }
+
+    // 前端地址: 状态文件 url 字段可覆盖 (调试用), 默认线上 EdgeOne Pages
+    let url = persisted
+        .get("url")
+        .and_then(|u| u.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_URL.to_string());
+    log(&format!("前端 URL: {url}"));
 
     let state = Arc::new(AppState {
         game_hwnd: Mutex::new(0),
