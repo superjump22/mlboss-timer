@@ -42,7 +42,7 @@ export const BOSSES = {
         labelEn: "Common",
         skills: [
           { id: "dr", pid: "dr", label: "DR", labelEn: "DR", cd: 60, warn: 5, color: "#b95cff", voice: "反伤好了", voiceEn: "DR ready" },
-          { id: "zombie", pid: "zombie", label: "Zombify", labelEn: "Zombify", cd: 120, warn: 5, color: "#9dff57", voice: "僵尸化好了", voiceEn: "Zombify ready" },
+          { id: "zombie", pid: "zombie", label: "Zombify", labelEn: "Zombify", cd: 120, warn: 5, color: "#9dff57", voice: "僵尸好了", voiceEn: "Zombie ready" },
           { id: "sed", pid: "sed", label: "Sed", labelEn: "SED", cd: 40, warn: 5, color: "#ffa930", voice: "诱惑好了", voiceEn: "Sed ready" },
           { id: "mini", pid: "mini", label: "Mini", labelEn: "Mini", cd: 60, warn: 5, color: "#4dd2ff", voice: "mini好了", voiceEn: "mini ready" },
         ],

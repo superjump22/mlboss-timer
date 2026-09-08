@@ -22,30 +22,84 @@ import miniaudio
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(BASE, "shell", "public", "voices")
 
-# (文件名后缀, TTS 音色, 短语表)
+# (文件名后缀, TTS 音色, 短语表) — 措辞与 shell/src/bosses.js 的 voice/voiceEn 保持一致
 LANGS = [
     (
         "",
         "zh-CN-XiaoxiaoNeural",
         {
+            # AUF
             "auf_mdr_ready": "主体反伤好了",
             "auf_mdp_ready": "主体DP好了",
             "auf_sed_ready": "诱惑好了",
             "auf_stun_ready": "眩晕好了",
             "auf_cdr_ready": "分身反伤好了",
             "auf_cdp_ready": "分身DP好了",
+            # PB (R/TL 用字母, 不带队友名; mini 中英文都用 mini)
+            "pb_dr_ready": "反伤好了",
+            "pb_zombie_ready": "僵尸好了",
+            "pb_sed_ready": "诱惑好了",
+            "pb_mini_ready": "mini好了",
+            "pb_ress1_ready": "R1好了",
+            "pb_ress2_ready": "R2好了",
+            "pb_ress3_ready": "R3好了",
+            "pb_ress4_ready": "R4好了",
+            "pb_ress5_ready": "R5好了",
+            "pb_tl1_ready": "TL1好了",
+            "pb_tl2_ready": "TL2好了",
+            "pb_tl3_ready": "TL3好了",
+            # HT (部位+技能全称)
+            "ht_laSed1_ready": "左手诱惑1好了",
+            "ht_laSed2_ready": "左手诱惑2好了",
+            "ht_laSed3_ready": "左手诱惑3好了",
+            "ht_laMass_ready": "左手群体好了",
+            "ht_laDp1_ready": "左手DP1好了",
+            "ht_laDp2_ready": "左手DP2好了",
+            "ht_raSed1_ready": "右手诱惑1好了",
+            "ht_raSed2_ready": "右手诱惑2好了",
+            "ht_raSed3_ready": "右手诱惑3好了",
+            "ht_raMass_ready": "右手群体好了",
+            "ht_mhDp1_ready": "中头DP1好了",
+            "ht_mhDp2_ready": "中头DP2好了",
         },
     ),
     (
         "_en",
         "en-US-AriaNeural",
         {
+            # AUF
             "auf_mdr_ready": "Main D R ready",
             "auf_mdp_ready": "Main D P ready",
             "auf_sed_ready": "Seduce ready",
             "auf_stun_ready": "Stun ready",
             "auf_cdr_ready": "Clone D R ready",
             "auf_cdp_ready": "Clone D P ready",
+            # PB
+            "pb_dr_ready": "D R ready",
+            "pb_zombie_ready": "Zombie ready",
+            "pb_sed_ready": "Sed ready",
+            "pb_mini_ready": "mini ready",
+            "pb_ress1_ready": "R 1 ready",
+            "pb_ress2_ready": "R 2 ready",
+            "pb_ress3_ready": "R 3 ready",
+            "pb_ress4_ready": "R 4 ready",
+            "pb_ress5_ready": "R 5 ready",
+            "pb_tl1_ready": "T L 1 ready",
+            "pb_tl2_ready": "T L 2 ready",
+            "pb_tl3_ready": "T L 3 ready",
+            # HT
+            "ht_laSed1_ready": "LA SED 1 ready",
+            "ht_laSed2_ready": "LA SED 2 ready",
+            "ht_laSed3_ready": "LA SED 3 ready",
+            "ht_laMass_ready": "LA MASS ready",
+            "ht_laDp1_ready": "LA D P 1 ready",
+            "ht_laDp2_ready": "LA D P 2 ready",
+            "ht_raSed1_ready": "RA SED 1 ready",
+            "ht_raSed2_ready": "RA SED 2 ready",
+            "ht_raSed3_ready": "RA SED 3 ready",
+            "ht_raMass_ready": "RA MASS ready",
+            "ht_mhDp1_ready": "M H D P 1 ready",
+            "ht_mhDp2_ready": "M H D P 2 ready",
         },
     ),
 ]
