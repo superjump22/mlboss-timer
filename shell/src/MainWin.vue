@@ -1,7 +1,8 @@
 <script setup>
-// 主客户端窗口 = 计时器管理中心: 三 boss 卡片(AUF/PB/HT) + 设置 + 帮助
-// 建房后悬浮窗创建, 本窗口保持显示; X = 最小化到托盘
-import { computed, onMounted, reactive, ref } from "vue";
+// 主客户端窗口 = 两级视图 (仿 bossassis.com): Boss 选择 → 加房 + 该 Boss 专属设置
+// 选定 boss 后: 建房/加入 (悬浮窗创建), 设置区含 per-boss 项 (PB 多一项队友名字)
+// X = 最小化到托盘
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { BossSync } from "./sync.js";
 import { preloadVoices, unlockAudio } from "./voice.js";
 import { locale, setLocale as baseSetLocale, t } from "./i18n.js";
@@ -13,16 +14,29 @@ const invoke = (cmd, args) =>
 const emit = (event, payload) =>
   isTauri ? window.__TAURI__.event.emit(event, payload).catch(() => {}) : null;
 
-// ---- Boss 卡片 (单房间模型: 同时只有一个活跃房间, 切卡 = 离开旧房 + 新建房) ----
+// ---- 视图与 Boss 选择 ----
 const bossList = Object.values(BOSSES);
+const view = ref("select"); // select = 选 Boss | boss = 加房 + 设置
+const activeBoss = ref(localStorage.getItem("activeBoss") || "auf");
+const bossDef = computed(() => BOSSES[activeBoss.value] || BOSSES.auf);
+
+function selectBoss(id) {
+  activeBoss.value = id;
+  localStorage.setItem("activeBoss", id);
+  view.value = "boss";
+  reloadAppearance(); // 外观设置读对应 boss 分 key
+}
+function backToSelect() {
+  if (inRoom.value) leaveRoom();
+  view.value = "select";
+}
+
+// ---- 房间 (单房间模型: 切 boss = 离开旧房 + 新建房) ----
 const sync = new BossSync();
 const inRoom = ref(false);
 const syncStatus = ref("idle");
-const activeBoss = ref(localStorage.getItem("activeBoss") || "auf"); // UI/设置分区用; 合法性由 bosses.js 保证
-const roomInputs = reactive({});
-for (const b of bossList) roomInputs[b.id] = localStorage.getItem(`room_${b.id}`) || "";
+const roomInput = ref("");
 const roomErr = ref("");
-const errBoss = ref("");
 sync.onStatus = (s) => (syncStatus.value = s);
 sync.onJoined = () => (inRoom.value = true);
 
@@ -38,7 +52,6 @@ const statusText = computed(
 const statusCls = computed(
   () => ({ connected: "ok", reconnecting: "warn", failed: "err" }[syncStatus.value] || "")
 );
-const activeCard = (b) => inRoom.value && activeBoss.value === b.id;
 
 function randomRoom() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -46,33 +59,28 @@ function randomRoom() {
   for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
   return s;
 }
-function joinRoom(bossId) {
-  const code = roomInputs[bossId].trim().toUpperCase();
+function joinRoom() {
+  const code = roomInput.value.trim().toUpperCase();
   if (code && !/^[A-Z0-9]{4,6}$/.test(code)) {
     roomErr.value = t("roomErr");
-    errBoss.value = bossId;
     return;
   }
   roomErr.value = "";
-  errBoss.value = "";
   if (inRoom.value) leaveRoom(); // 切 boss = 离开旧房 (单房间模型)
   awaitRoomState = true; // 等首个 room_state_sync 判定是否空房间 (应用记忆偏移)
   const room = code || randomRoom();
-  roomInputs[bossId] = room;
-  localStorage.setItem(`room_${bossId}`, room);
+  roomInput.value = room;
   localStorage.setItem("room", room);
-  localStorage.setItem("activeBoss", bossId);
-  activeBoss.value = bossId;
-  reloadAppearance(); // 切 boss 后外观设置读对应分 key
+  localStorage.setItem("activeBoss", activeBoss.value);
   unlockAudio();
   sync.join(room);
   inRoom.value = true;
   // 创建悬浮窗 (主窗口保持显示); boss 参数决定面板位置存储分 key
-  invoke("open_overlay", { boss: bossId });
+  invoke("open_overlay", { boss: activeBoss.value });
 }
-function quickCreate(bossId) {
-  roomInputs[bossId] = "";
-  joinRoom(bossId);
+function quickCreate() {
+  roomInput.value = "";
+  joinRoom();
 }
 function leaveRoom() {
   sync.leave();
@@ -82,9 +90,9 @@ function leaveRoom() {
   emit("room-left");
 }
 function retryJoin() {
-  const room = sync.room || roomInputs[activeBoss.value]?.trim().toUpperCase();
+  const room = sync.room || roomInput.value.trim().toUpperCase();
   if (!room) return;
-  roomInputs[activeBoss.value] = room;
+  roomInput.value = room;
   awaitRoomState = true;
   unlockAudio();
   sync.join(room);
@@ -154,7 +162,7 @@ sync.onOffsetChange = (n, source) => {
   }
   offsetInput.value = n;
   localStorage.setItem("lastOffset", String(n)); // 历史记忆 (本地改/房间同步均更新)
-  if (source === "remote" || source === "joined" && n > 0) showOffsetMsg("offsetSynced", n, true); // 队友改动/加入已有偏移房间 → 统一提示
+  if (source === "remote" || (source === "joined" && n > 0)) showOffsetMsg("offsetSynced", n, true); // 队友改动/加入已有偏移房间 → 统一提示
   else if (source === "local") showOffsetMsg("offsetApplied", n, true);
 };
 function applyOffset() {
@@ -217,8 +225,6 @@ const SOUND_OPTIONS = [
 ];
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
-// 外观设置仅作用于当前 boss (卡片切换后滑块跟随)
-const appearanceBossLabel = computed(() => BOSSES[activeBoss.value]?.label || "AUF");
 
 function persistSettings() {
   localStorage.setItem("soundMode", soundMode.value);
@@ -314,10 +320,8 @@ const progText = computed(() => {
   return total > 0 ? `${mb(received)}/${mb(total)} MB` : `${mb(received)} MB`;
 });
 
-onMounted(async () => {
-  preloadVoices();
-  doCheckUpdate(); // 启动检查 (静默: 失败不打扰)
-  // 主窗口高度按内容自适应 (宽度固定 520)
+// ---- 窗口高度自适应 (两级视图高度不同, 切换时重算; 宽度固定 520) ----
+function adjustHeight() {
   requestAnimationFrame(() => {
     const el = document.querySelector(".content");
     if (el) {
@@ -325,6 +329,13 @@ onMounted(async () => {
       invoke("set_window_size", { width: 520, height: Math.max(400, h) });
     }
   });
+}
+watch([view, inRoom], () => adjustHeight(), { flush: "post" });
+
+onMounted(async () => {
+  preloadVoices();
+  doCheckUpdate(); // 启动检查 (静默: 失败不打扰)
+  adjustHeight();
   if (isTauri) {
     try {
       const { listen } = window.__TAURI__.event;
@@ -387,146 +398,165 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- 计时器卡片 (单房间: 活跃卡片显示房间控制, 其余卡片可直接加入 = 切换 boss) -->
-      <div class="section">
-        <div class="secTitle">{{ t("timersSection") }}</div>
-        <div
+      <!-- ===== 视图一: 选择 Boss ===== -->
+      <div v-if="view === 'select'" class="section">
+        <div class="secTitle">{{ t("selectBossTitle") }}</div>
+        <button
           v-for="b in bossList"
           :key="b.id"
-          class="timercard"
-          :class="{ active: activeCard(b) }"
+          class="bosscard"
+          :style="{ '--boss-color': b.color }"
+          @click="selectBoss(b.id)"
         >
-          <div class="tcHead">
-            <span class="tcName">{{ b.label }}</span>
-            <span v-if="activeCard(b)" class="pill" :class="statusCls">{{ statusText }}</span>
-            <span v-else class="pill off">{{ t("notEnabled") }}</span>
+          <span class="bcName">{{ b.label }}</span>
+          <span class="bcFull">{{ b.full }}</span>
+          <div class="bcGroups">
+            <span v-for="g in b.groups" :key="g.id" class="bcChip">{{
+              locale === "en" && g.labelEn ? g.labelEn : g.label
+            }}</span>
           </div>
-          <template v-if="!activeCard(b)">
-            <button class="btn big" @click="quickCreate(b.id)">{{ t("quickCreate") }}</button>
-            <div class="joinrow">
-              <input
-                v-model="roomInputs[b.id]"
-                :placeholder="t('roomCodePh')"
-                maxlength="6"
-                class="inp"
-                @keyup.enter="joinRoom(b.id)"
-              />
-              <button class="btn" @click="joinRoom(b.id)">{{ t("join") }}</button>
-            </div>
-            <p v-if="roomErr && errBoss === b.id" class="err">{{ roomErr }}</p>
-          </template>
-          <template v-else>
-            <div class="roomline">
-              <button class="roomcode" :title="t('copyRoom')" @click="copyRoom">
-                {{ copied ? t("copied") : sync.room }}
-              </button>
-              <button v-if="syncStatus === 'failed'" class="pill err" @click="retryJoin">{{ t("retry") }}</button>
-              <span class="flex1"></span>
-              <button class="btn" @click="backToGame">{{ t("backToGame") }}</button>
-              <button class="btn danger" @click="leaveRoom">{{ t("leaveRoom") }}</button>
-            </div>
-            <p class="muted">{{ t("lobbyHint") }}</p>
-            <!-- PB 名字编辑 (纯本地) -->
-            <div v-if="b.id === 'pb'" class="namesedit">
-              <div class="namesTitle">{{ t("pbNamesTitle") }}</div>
-              <div class="namesgrid">
-                <label v-for="k in NAME_KEYS" :key="k" class="nameslot">
-                  <span class="slotph">{{ k.startsWith("ress") ? "R" + k.slice(4) : "TL" + k.slice(2) }}</span>
-                  <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
-                </label>
-              </div>
-              <div class="namesrow">
-                <span v-if="namesMsg" class="muted">{{ namesMsg }}</span>
-                <span class="flex1"></span>
-                <button class="btn sm" @click="savePbNames">{{ t("namesSave") }}</button>
-              </div>
-            </div>
-          </template>
-        </div>
+        </button>
       </div>
 
-      <!-- 设置 -->
-      <div class="section">
-        <div class="secTitle">{{ t("settingsSection") }}</div>
-        <div class="settings">
-          <div class="setrow">
-            <span class="setlabel">{{ t("soundMode") }}</span>
-            <div class="seg">
-              <button
-                v-for="o in SOUND_OPTIONS"
-                :key="o.value"
-                class="segbtn"
-                :class="{ active: soundMode === o.value }"
-                @click="setSoundMode(o.value)"
-              >
-                {{ o.label() }}
-              </button>
-            </div>
-          </div>
-          <div class="setrow">
-            <span class="setlabel">
-              {{ t("opacity") }}
-              <span class="bossTag">{{ appearanceBossLabel }}</span>
-            </span>
-            <div class="sliderbox">
-              <input v-model.number="panelOpacity" type="range" min="0.5" max="1" step="0.01" @input="applyAppearance" />
-              <span class="sliderval">{{ Math.round(panelOpacity * 100) }}%</span>
-            </div>
-          </div>
-          <div class="setrow">
-            <span class="setlabel">
-              {{ t("scale") }}
-              <span class="bossTag">{{ appearanceBossLabel }}</span>
-            </span>
-            <div class="sliderbox">
-              <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
-              <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
-            </div>
-          </div>
-          <div class="setrow">
-            <span class="setlabel offsetlabel">
-              {{ t("offsetLabel") }}
-              <span class="helpicon" tabindex="0">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="9.5" stroke-width="1.8" />
-                  <path d="M9.6 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.6 2.2-2.6 3.5" />
-                  <circle cx="12" cy="17" r="0.4" fill="currentColor" stroke="none" />
-                </svg>
-                <span class="helptip">{{ t("offsetTip") }}</span>
-              </span>
-            </span>
-            <div class="offsetbox">
-              <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{
-                offsetMsg.n === null
-                  ? t(offsetMsg.key)
-                  : t(offsetMsg.key).replace("{n}", offsetMsg.n)
-              }}</span>
-              <input
-                v-model="offsetInput"
-                type="number"
-                min="0"
-                max="30"
-                step="1"
-                class="inp offsetinp"
-                @keyup.enter="applyOffset"
-              />
-              <span class="offsetunit">s</span>
-              <button class="btn sm" @click="applyOffset">{{ t("offsetApply") }}</button>
-            </div>
-          </div>
-          <div class="setrow">
-            <span class="setlabel">{{ t("language") }}</span>
-            <div class="seg">
-              <button class="segbtn" :class="{ active: locale === 'zh' }" @click="setLocale('zh')">中文</button>
-              <button class="segbtn" :class="{ active: locale === 'en' }" @click="setLocale('en')">English</button>
-            </div>
-          </div>
-          <div class="dialogrow">
+      <!-- ===== 视图二: 加房 + 该 Boss 设置 ===== -->
+      <template v-else>
+        <div class="section">
+          <div class="bosHead">
+            <button class="btn ghost sm" @click="backToSelect">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 5l-7 7 7 7" />
+              </svg>
+              {{ t("back") }}
+            </button>
+            <span class="tcName" :style="{ color: bossDef.color }">{{ bossDef.label }}</span>
+            <span class="muted bosFull">{{ bossDef.full }}</span>
+            <span v-if="inRoom" class="pill" :class="statusCls">{{ statusText }}</span>
             <span class="flex1"></span>
-            <button class="btn ghost sm" @click="resetDefaults">{{ t("resetDefaults") }}</button>
+          </div>
+
+          <div class="timercard" :class="{ active: inRoom }">
+            <template v-if="!inRoom">
+              <button class="btn big" @click="quickCreate">{{ t("quickCreate") }}</button>
+              <div class="joinrow">
+                <input v-model="roomInput" :placeholder="t('roomCodePh')" maxlength="6" class="inp" @keyup.enter="joinRoom" />
+                <button class="btn" @click="joinRoom">{{ t("join") }}</button>
+              </div>
+              <p v-if="roomErr" class="err">{{ roomErr }}</p>
+            </template>
+            <template v-else>
+              <div class="roomline">
+                <button class="roomcode" :title="t('copyRoom')" @click="copyRoom">
+                  {{ copied ? t("copied") : sync.room }}
+                </button>
+                <button v-if="syncStatus === 'failed'" class="pill err" @click="retryJoin">{{ t("retry") }}</button>
+                <span class="flex1"></span>
+                <button class="btn" @click="backToGame">{{ t("backToGame") }}</button>
+                <button class="btn danger" @click="leaveRoom">{{ t("leaveRoom") }}</button>
+              </div>
+              <p class="muted">{{ t("lobbyHint") }}</p>
+            </template>
+          </div>
+
+          <!-- PB 专属: 队友名字 (纯本地) -->
+          <div v-if="activeBoss === 'pb'" class="namesedit">
+            <div class="namesTitle">{{ t("pbNamesTitle") }}</div>
+            <div class="namesgrid">
+              <label v-for="k in NAME_KEYS" :key="k" class="nameslot">
+                <span class="slotph">{{ k.startsWith("ress") ? "R" + k.slice(4) : "TL" + k.slice(2) }}</span>
+                <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
+              </label>
+            </div>
+            <div class="namesrow">
+              <span v-if="namesMsg" class="muted">{{ namesMsg }}</span>
+              <span class="flex1"></span>
+              <button class="btn sm" @click="savePbNames">{{ t("namesSave") }}</button>
+            </div>
           </div>
         </div>
-      </div>
+
+        <!-- 设置 (声音/语言/offset 全局; 透明度/缩放 per-boss) -->
+        <div class="section">
+          <div class="secTitle">{{ t("settingsSection") }}</div>
+          <div class="settings">
+            <div class="setrow">
+              <span class="setlabel">{{ t("soundMode") }}</span>
+              <div class="seg">
+                <button
+                  v-for="o in SOUND_OPTIONS"
+                  :key="o.value"
+                  class="segbtn"
+                  :class="{ active: soundMode === o.value }"
+                  @click="setSoundMode(o.value)"
+                >
+                  {{ o.label() }}
+                </button>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">
+                {{ t("opacity") }}
+                <span class="bossTag">{{ bossDef.label }}</span>
+              </span>
+              <div class="sliderbox">
+                <input v-model.number="panelOpacity" type="range" min="0.5" max="1" step="0.01" @input="applyAppearance" />
+                <span class="sliderval">{{ Math.round(panelOpacity * 100) }}%</span>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">
+                {{ t("scale") }}
+                <span class="bossTag">{{ bossDef.label }}</span>
+              </span>
+              <div class="sliderbox">
+                <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
+                <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel offsetlabel">
+                {{ t("offsetLabel") }}
+                <span class="helpicon" tabindex="0">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9.5" stroke-width="1.8" />
+                    <path d="M9.6 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.6 2.2-2.6 3.5" />
+                    <circle cx="12" cy="17" r="0.4" fill="currentColor" stroke="none" />
+                  </svg>
+                  <span class="helptip">{{ t("offsetTip") }}</span>
+                </span>
+              </span>
+              <div class="offsetbox">
+                <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{
+                  offsetMsg.n === null
+                    ? t(offsetMsg.key)
+                    : t(offsetMsg.key).replace("{n}", offsetMsg.n)
+                }}</span>
+                <input
+                  v-model="offsetInput"
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="1"
+                  class="inp offsetinp"
+                  @keyup.enter="applyOffset"
+                />
+                <span class="offsetunit">s</span>
+                <button class="btn sm" @click="applyOffset">{{ t("offsetApply") }}</button>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">{{ t("language") }}</span>
+              <div class="seg">
+                <button class="segbtn" :class="{ active: locale === 'zh' }" @click="setLocale('zh')">中文</button>
+                <button class="segbtn" :class="{ active: locale === 'en' }" @click="setLocale('en')">English</button>
+              </div>
+            </div>
+            <div class="dialogrow">
+              <span class="flex1"></span>
+              <button class="btn ghost sm" @click="resetDefaults">{{ t("resetDefaults") }}</button>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -581,6 +611,61 @@ input {
   padding-left: 2px;
 }
 
+/* ---- Boss 选择卡片 (仿 bossassis.com 首页) ---- */
+.bosscard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(18, 21, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid var(--boss-color, #4ade80);
+  cursor: pointer;
+  color: #eef0f4;
+  text-align: left;
+  transition: background 0.12s, transform 0.12s;
+}
+.bosscard:hover {
+  background: rgba(30, 35, 48, 0.95);
+  transform: translateY(-1px);
+}
+.bcName {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--boss-color, #eef0f4);
+}
+.bcFull {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 1px;
+}
+.bcGroups {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.bcChip {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ---- Boss 视图头部 ---- */
+.bosHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.bosFull {
+  letter-spacing: 1px;
+}
+
 /* ---- 计时器卡片 ---- */
 .timercard {
   display: flex;
@@ -593,11 +678,6 @@ input {
 }
 .timercard.active {
   border-color: rgba(74, 222, 128, 0.35);
-}
-.tcHead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 .tcName {
   font-weight: 800;
@@ -692,61 +772,6 @@ input {
   white-space: nowrap;
 }
 
-/* ---- PB 名字编辑 ---- */
-.namesedit {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-.namesTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.55);
-  letter-spacing: 1px;
-}
-.namesgrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.nameslot {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.slotph {
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.4);
-  font-family: Consolas, monospace;
-}
-.namesinp {
-  padding: 4px 8px;
-  font-size: 12px;
-  min-width: 0;
-}
-.namesrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* 外观设置的 boss 归属标签 */
-.bossTag {
-  font-size: 10px;
-  font-weight: 700;
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 4px;
-  vertical-align: 1px;
-}
-
 /* ---- 设置 ---- */
 .settings {
   display: flex;
@@ -818,9 +843,6 @@ input {
   border: none;
   font-weight: 600;
 }
-.pill.off {
-  color: rgba(255, 255, 255, 0.4);
-}
 .muted {
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
@@ -889,11 +911,6 @@ input {
 .helpicon:focus .helptip {
   opacity: 1;
   transform: translateY(0);
-}
-.keybtn {
-  min-width: 140px;
-  background: rgba(255, 255, 255, 0.09);
-  font-family: Consolas, monospace;
 }
 .seg {
   display: flex;
@@ -980,5 +997,60 @@ input {
   margin-top: 8px; /* 与上方设置行拉开间距 */
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.07); /* 视觉分组: 操作收尾区 */
+}
+
+/* ---- PB 名字编辑 ---- */
+.namesedit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(18, 21, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.namesTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 1px;
+}
+.namesgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.nameslot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.slotph {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: Consolas, monospace;
+}
+.namesinp {
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.namesrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 外观设置的 boss 归属标签 */
+.bossTag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: 1px;
 }
 </style>

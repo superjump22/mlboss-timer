@@ -8,6 +8,8 @@ export const BOSSES = {
   auf: {
     id: "auf",
     label: "AUF",
+    full: "Aufheben",
+    color: "#b95cff",
     groups: [
       {
         id: "main",
@@ -35,6 +37,8 @@ export const BOSSES = {
   pb: {
     id: "pb",
     label: "PB",
+    full: "Pink Bean",
+    color: "#ff8fd0",
     groups: [
       {
         id: "common",
@@ -75,6 +79,8 @@ export const BOSSES = {
   ht: {
     id: "ht",
     label: "HT",
+    full: "Horntail",
+    color: "#ff5c5c",
     groups: [
       {
         id: "la",
