@@ -340,8 +340,8 @@ async fn show_main(app: tauri::AppHandle) {
 
 // ---- 更新 (客户端内下载安装; EdgeOne 静态托管 manifest + 安装包为主渠道) ----
 
-/// 更新清单 (发布时上传 EdgeOne /dl/; 带 ?t= 时间戳破 CDN 缓存)
-const MANIFEST_URL: &str = "https://mlbosstimer.cc/dl/manifest.json";
+/// 更新清单 (独立 Pages 项目 dl.mlbosstimer.cc, 经 edgeone CLI 上传; 带 ?t= 时间戳破 CDN 缓存)
+const MANIFEST_URL: &str = "https://dl.mlbosstimer.cc/manifest.json";
 
 #[derive(serde::Serialize)]
 struct UpdateInfo {
