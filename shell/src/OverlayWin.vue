@@ -23,10 +23,14 @@ function lsGet(key, fallback) {
 
 // ---- 技能集与分组布局 (AUF 单行 6 格零回归; PB/HT 12 格两行) ----
 const SKILLS = skillsOf(boss);
-// 分组装箱: 每行技能数上限 8 (AUF 4+2=6 单行; PB 4 | 5+3 两行; HT 6 | 4+2 两行)
+// PB 支援技能开关 (R/TL 位; 默认显示, 主窗口设置经 settings-changed 通知)
+const showSupport = ref(lsGet("showSupport", "1") === "1");
+// 分组装箱: 每行技能数上限 8 (AUF 4+2=6 单行; PB 4 | 5+3 两行; HT 左6+中2 | 右4 两行)
 const CELL_ROW_CAP = 8;
 const rows = computed(() => {
-  const groups = BOSSES[boss]?.groups || [];
+  const groups = (BOSSES[boss]?.groups || []).filter(
+    (g) => showSupport.value || !g.support
+  );
   const rows = [];
   let cur = [];
   let curN = 0;
@@ -94,10 +98,11 @@ const BASE_SIZE_FACTOR = 0.8;
 const gameFactor = ref(1);
 const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FACTOR);
 function reloadAppearance() {
-  reloadLocale(); // 语言跟随主窗口设置
+  reloadLocale(); // 语言/时间格式跟随主窗口设置
   soundMode.value = localStorage.getItem("soundMode") || "beep";
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
+  showSupport.value = lsGet("showSupport", "1") === "1"; // PB 支援技能开关
   loadPbNames(); // PB 名字 (主窗口保存后刷新)
   // 尺寸上报由 watch(uiScale) 统一触发, 不手动调用 (避免 DOM 未 flush 测量旧值)
 }
@@ -238,7 +243,7 @@ function schedulePushRegions() {
     requestAnimationFrame(pushRegionsNow);
   });
 }
-watch([locked, uiScale, locale, () => gameWins.value.length], schedulePushRegions);
+watch([locked, uiScale, locale, showSupport, () => gameWins.value.length], schedulePushRegions);
 
 // ---- 自定义拖拽 (不走 OS 拖拽循环 → 方向键等游戏按键不影响) ----
 let dragStart = null; // {sx, sy(屏幕), wx, wy(窗口逻辑位置)}
@@ -280,7 +285,7 @@ async function reportBaseSize() {
   });
 }
 // 所有尺寸相关变化 (含 mount 时拉取的 gameFactor) 统一走 watch, 不手动调用避免竞态
-watch([locked, uiScale, gameFactor, locale, () => gameWins.value.length], reportBaseSize, { flush: "post" });
+watch([locked, uiScale, gameFactor, locale, showSupport, () => gameWins.value.length], reportBaseSize, { flush: "post" });
 
 // ---- 生命周期 ----
 let unlisteners = [];
@@ -362,7 +367,8 @@ onBeforeUnmount(() => {
       <div class="rows">
         <div v-for="(row, ri) in rows" :key="ri" class="row">
           <template v-for="(g, gi) in row">
-            <span v-if="gi > 0" class="gdiv" :title="locale === 'en' && g.labelEn ? g.labelEn : g.label"></span>
+            <!-- 分隔线仅 AUF (本体/分身区分); PB/HT 组间靠布局与 tint 区分 -->
+            <span v-if="gi > 0 && boss === 'auf'" class="gdiv" :title="locale === 'en' && g.labelEn ? g.labelEn : g.label"></span>
             <div class="cells" @mousedown.capture="onCellsDown">
               <TimerCell
                 v-for="s in g.skills"
@@ -371,6 +377,7 @@ onBeforeUnmount(() => {
                 :state="stateOf(s)"
                 :effcd="effCd(s)"
                 :name="nameOf(s)"
+                :tint="g.tint || ''"
                 @start="start(s)"
                 @reset="reset(s)"
               />

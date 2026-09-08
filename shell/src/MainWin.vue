@@ -6,7 +6,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { BossSync } from "./sync.js";
 import { preloadVoices, unlockAudio } from "./voice.js";
 import { locale, setLocale as baseSetLocale, t, timeFmt as timeFmtRef } from "./i18n.js";
-import { BOSSES } from "./bosses.js";
+import { BOSSES, timeFmtOf } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
 const invoke = (cmd, args) =>
@@ -19,6 +19,7 @@ const bossList = Object.values(BOSSES);
 const view = ref("select"); // select = 选 Boss | boss = 加房 + 设置
 const activeBoss = ref(localStorage.getItem("activeBoss") || "auf");
 const bossDef = computed(() => BOSSES[activeBoss.value] || BOSSES.auf);
+const skillsCount = (b) => t("skillCount").replace("{n}", b.groups.reduce((n, g) => n + g.skills.length, 0));
 
 function selectBoss(id) {
   activeBoss.value = id;
@@ -245,11 +246,26 @@ function reloadAppearance() {
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
 }
-// 时间显示格式 (全局): "ms" = 分秒 | "sec" = 纯秒数; 悬浮窗 reloadLocale 时同步
-const timeFmtVal = timeFmtRef;
+// 时间显示格式 (per-boss, 默认按原版网页: AUF 秒数 / PB、HT 分秒): "ms" | "sec"
+// 悬浮窗 reloadLocale 时按自己 boss 的 key 重读
+const timeFmtVal = ref(timeFmtOf(activeBoss.value));
+watch(activeBoss, () => (timeFmtVal.value = timeFmtOf(activeBoss.value)));
 function setTimeFmt(v) {
   timeFmtVal.value = v;
-  localStorage.setItem("timeFmt", v);
+  localStorage.setItem(`timeFmt_${activeBoss.value}`, v);
+  timeFmtRef.value = v; // 本窗口即时生效
+  emit("settings-changed");
+}
+
+// PB 支援技能显示开关 (R/TL 位; per-boss, 默认显示)
+const showSupport = ref(localStorage.getItem("showSupport_pb") !== "0");
+watch(activeBoss, () => {
+  if (activeBoss.value === "pb")
+    showSupport.value = localStorage.getItem("showSupport_pb") !== "0";
+});
+function setShowSupport(v) {
+  showSupport.value = v;
+  localStorage.setItem("showSupport_pb", v ? "1" : "0");
   emit("settings-changed");
 }
 
@@ -262,7 +278,9 @@ function resetDefaults() {
   soundMode.value = "beep";
   panelOpacity.value = 0.85;
   uiScale.value = 1;
-  setTimeFmt("ms");
+  timeFmtVal.value = BOSSES[activeBoss.value]?.timeFmt || "ms"; // 恢复原版默认格式
+  localStorage.removeItem(`timeFmt_${activeBoss.value}`);
+  if (activeBoss.value === "pb") setShowSupport(true);
   setLocale("zh");
   persistSettings();
   unlockAudio();
@@ -417,8 +435,12 @@ onMounted(async () => {
           :style="{ '--boss-color': b.color }"
           @click="selectBoss(b.id)"
         >
-          <span class="bcName">{{ b.label }}</span>
-          <span class="bcFull">{{ b.full }}</span>
+          <div class="bcRow">
+            <span class="bcName">{{ b.label }}</span>
+            <span class="bcFull">{{ b.full }}</span>
+            <span class="flex1"></span>
+            <span class="bcCount">{{ skillsCount(b) }}</span>
+          </div>
           <div class="bcGroups">
             <span v-for="g in b.groups" :key="g.id" class="bcChip">{{
               locale === "en" && g.labelEn ? g.labelEn : g.label
@@ -427,9 +449,9 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- ===== 视图二: 加房 + 该 Boss 设置 ===== -->
+      <!-- ===== 视图二: 加房 + 该 Boss 设置 (主题色随 boss) ===== -->
       <template v-else>
-        <div class="section">
+        <div class="section" :style="{ '--boss-color': bossDef.color }">
           <div class="bosHead">
             <button class="btn ghost sm" @click="backToSelect">
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
@@ -466,14 +488,30 @@ onMounted(async () => {
             </template>
           </div>
 
-          <!-- PB 专属: 队友名字 (纯本地) -->
+          <!-- PB 专属: 队友名字 (纯本地) — R 5 列一行 / TL 3 列一行 -->
           <div v-if="activeBoss === 'pb'" class="namesedit">
             <div class="namesTitle">{{ t("pbNamesTitle") }}</div>
-            <div class="namesgrid">
-              <label v-for="k in NAME_KEYS" :key="k" class="nameslot">
-                <span class="slotph">{{ k.startsWith("ress") ? "R" + k.slice(4) : "TL" + k.slice(2) }}</span>
-                <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
-              </label>
+            <div class="namesblock">
+              <div class="nbHead">
+                <span class="nbTag">R</span><span class="nbLabel">{{ t("pbGroupRes") }}</span>
+              </div>
+              <div class="namesgrid g5">
+                <label v-for="k in NAME_KEYS.slice(0, 5)" :key="k" class="nameslot">
+                  <span class="slotph">{{ "R" + k.slice(4) }}</span>
+                  <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
+                </label>
+              </div>
+            </div>
+            <div class="namesblock">
+              <div class="nbHead">
+                <span class="nbTag tl">TL</span><span class="nbLabel">{{ t("pbGroupTl") }}</span>
+              </div>
+              <div class="namesgrid g3">
+                <label v-for="k in NAME_KEYS.slice(5)" :key="k" class="nameslot">
+                  <span class="slotph">{{ "TL" + k.slice(2) }}</span>
+                  <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
+                </label>
+              </div>
             </div>
             <div class="namesrow">
               <span v-if="namesMsg" class="muted">{{ namesMsg }}</span>
@@ -483,10 +521,17 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 设置 (声音/语言/offset 全局; 透明度/缩放 per-boss) -->
-        <div class="section">
+        <!-- 设置 (声音/语言/offset 全局; 透明度/缩放/格式 per-boss; 主题色随 boss) -->
+        <div class="section" :style="{ '--boss-color': bossDef.color }">
           <div class="secTitle">{{ t("settingsSection") }}</div>
           <div class="settings">
+            <div v-if="activeBoss === 'pb'" class="setrow">
+              <span class="setlabel">{{ t("showSupport") }}</span>
+              <div class="seg">
+                <button class="segbtn" :class="{ active: showSupport }" @click="setShowSupport(true)">{{ t("on") }}</button>
+                <button class="segbtn" :class="{ active: !showSupport }" @click="setShowSupport(false)">{{ t("off") }}</button>
+              </div>
+            </div>
             <div class="setrow">
               <span class="setlabel">{{ t("soundMode") }}</span>
               <div class="seg">
@@ -632,43 +677,52 @@ input {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background: rgba(18, 21, 30, 0.92);
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--boss-color, #4ade80) 10%, rgba(18, 21, 30, 0.92)), rgba(18, 21, 30, 0.92) 65%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 3px solid var(--boss-color, #4ade80);
   cursor: pointer;
   color: #eef0f4;
   text-align: left;
-  transition: background 0.12s, transform 0.12s;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
 }
 .bosscard:hover {
-  background: rgba(30, 35, 48, 0.95);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--boss-color, #4ade80) 45%, transparent);
+  transform: translateY(-2px);
+}
+.bcRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
 }
 .bcName {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: 2px;
   color: var(--boss-color, #eef0f4);
 }
 .bcFull {
-  font-size: 12px;
+  font-size: 13px;
   color: rgba(255, 255, 255, 0.45);
   letter-spacing: 1px;
+}
+.bcCount {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
 }
 .bcGroups {
   display: flex;
   gap: 6px;
-  margin-top: 2px;
 }
 .bcChip {
   font-size: 11px;
-  padding: 2px 9px;
+  padding: 3px 10px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* ---- Boss 视图头部 ---- */
@@ -682,7 +736,7 @@ input {
   letter-spacing: 1px;
 }
 
-/* ---- 计时器卡片 ---- */
+/* ---- 计时器卡片 (Boss 视图内用主题色) ---- */
 .timercard {
   display: flex;
   flex-direction: column;
@@ -693,7 +747,7 @@ input {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .timercard.active {
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: color-mix(in srgb, var(--boss-color, #4ade80) 40%, transparent);
 }
 .tcName {
   font-weight: 800;
@@ -707,18 +761,18 @@ input {
 }
 .roomcode {
   border: none;
-  background: rgba(74, 222, 128, 0.1);
+  background: color-mix(in srgb, var(--boss-color, #4ade80) 12%, transparent);
   font-family: Consolas, monospace;
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: #4ade80;
+  color: var(--boss-color, #4ade80);
   cursor: pointer;
   padding: 2px 10px;
   border-radius: 8px;
 }
 .roomcode:hover {
-  background: rgba(74, 222, 128, 0.2);
+  background: color-mix(in srgb, var(--boss-color, #4ade80) 22%, transparent);
 }
 .joinrow {
   display: flex;
@@ -948,7 +1002,7 @@ input {
   color: #fff;
 }
 .segbtn.active {
-  background: #2d6a4f;
+  background: var(--boss-color, #2d6a4f);
   color: #fff;
 }
 .sliderbox {
@@ -960,7 +1014,7 @@ input {
 }
 .sliderbox input[type="range"] {
   flex: 1;
-  accent-color: #4ade80;
+  accent-color: var(--boss-color, #4ade80);
 }
 .sliderval {
   font-family: Consolas, monospace;
@@ -1015,12 +1069,12 @@ input {
   border-top: 1px solid rgba(255, 255, 255, 0.07); /* 视觉分组: 操作收尾区 */
 }
 
-/* ---- PB 名字编辑 ---- */
+/* ---- PB 名字编辑 (R 5 列 / TL 3 列 分组) ---- */
 .namesedit {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 14px;
+  padding: 16px 18px;
   border-radius: 14px;
   background: rgba(18, 21, 30, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1030,16 +1084,49 @@ input {
   font-weight: 700;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 1px;
+  margin-bottom: -4px;
+}
+.namesblock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nbHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nbTag {
+  font-size: 11px;
+  font-weight: 800;
+  font-family: Consolas, monospace;
+  color: #7ce38b;
+  background: rgba(124, 227, 139, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.nbTag.tl {
+  color: #64dfdf;
+  background: rgba(100, 223, 223, 0.12);
+}
+.nbLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
 }
 .namesgrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+}
+.namesgrid.g5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+.namesgrid.g3 {
+  grid-template-columns: repeat(5, 1fr); /* 与 R 行同宽节奏, TL3 占前 3 列 */
 }
 .nameslot {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 .slotph {
@@ -1049,7 +1136,7 @@ input {
   font-family: Consolas, monospace;
 }
 .namesinp {
-  padding: 4px 8px;
+  padding: 5px 8px;
   font-size: 12px;
   min-width: 0;
 }

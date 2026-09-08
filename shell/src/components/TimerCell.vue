@@ -7,6 +7,7 @@ const props = defineProps({
   state: Object, // {phase:'idle'|'run'|'ready', remain}
   effcd: { type: Number, default: 0 }, // 含 offset 的有效 CD (未传/0 时用 skill.cd)
   name: { type: String, default: "" }, // PB 可命名格子的自定义名字 (空 = 显示占位符)
+  tint: { type: String, default: "" }, // HT 部位背景色 (左手暖/中头紫/右手冷)
 });
 const emit = defineEmits(["start", "reset"]);
 
@@ -53,6 +54,7 @@ function onClick() {
   <div
     class="cell"
     :class="[display.cls, { pressed }]"
+    :style="tint ? { background: tint } : undefined"
     @mousedown="pressed = true"
     @mouseup="pressed = false"
     @mouseleave="pressed = false"

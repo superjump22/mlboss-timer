@@ -50,6 +50,12 @@ const dict = {
     settingsSection: "设置",
     selectBossTitle: "选择 Boss",
     back: "返回",
+    skillCount: "{n} 个技能",
+    showSupport: "显示支援技能",
+    on: "显示",
+    off: "隐藏",
+    pbGroupRes: "复活术",
+    pbGroupTl: "伺机待发",
     pbNamesTitle: "队友名字（R=复活位 / TL=Time Leap 位，仅本机）",
     namesPh: "名字",
     namesSave: "保存名字",
@@ -117,6 +123,12 @@ const dict = {
     settingsSection: "Settings",
     selectBossTitle: "Select boss",
     back: "Back",
+    skillCount: "{n} skills",
+    showSupport: "Support skills",
+    on: "Show",
+    off: "Hide",
+    pbGroupRes: "Res",
+    pbGroupTl: "Time Leap",
     pbNamesTitle: "Player names (R = Res / TL = Time Leap, local only)",
     namesPh: "Name",
     namesSave: "Save names",
@@ -140,8 +152,10 @@ const dict = {
 
 export const locale = ref(localStorage.getItem("locale") || "zh");
 
-// 时间显示格式: "ms" = 分秒 (5:00) | "sec" = 纯秒数 (300); 全局偏好, settings-changed 时 reload
-export const timeFmt = ref(localStorage.getItem("timeFmt") || "ms");
+// 时间显示格式: "ms" = 分秒 (5:00) | "sec" = 纯秒数 (300)
+// per-boss 偏好 (timeFmt_{boss}); 当前窗口锁定一个 boss, 主窗口改设置经 settings-changed 通知悬浮窗 reload
+import { timeFmtOf, activeBossId } from "./bosses.js";
+export const timeFmt = ref(timeFmtOf(activeBossId()));
 
 export function t(key) {
   return dict[locale.value]?.[key] ?? dict.zh[key] ?? key;
@@ -158,8 +172,8 @@ export function reloadLocale() {
   if (saved && saved !== locale.value) {
     locale.value = saved;
   }
-  const fmt = localStorage.getItem("timeFmt");
-  if (fmt && fmt !== timeFmt.value) {
+  const fmt = timeFmtOf(activeBossId());
+  if (fmt !== timeFmt.value) {
     timeFmt.value = fmt;
   }
 }
