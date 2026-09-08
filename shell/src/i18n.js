@@ -95,7 +95,6 @@ const dict = {
     language: "Language",
     resetDefaults: "Reset defaults",
     done: "Done",
-    settingsHint: "Saved locally, applies instantly.",
     lockOnTip: "Locked: click-through (unlock to drag/click)",
     lockOffTip: "Unlocked: drag, click to start, double-click to reset",
     dragTip: "Drag panel",
