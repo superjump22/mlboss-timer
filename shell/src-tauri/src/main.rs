@@ -371,10 +371,10 @@ async fn show_main(app: tauri::AppHandle) {
     show_main_win(&app);
 }
 
-// ---- 更新 (客户端内下载安装; EdgeOne 静态托管 manifest + 安装包为主渠道) ----
+// ---- 更新 (客户端内下载安装; 腾讯云 COS + EdgeOne 加速托管 manifest + 安装包) ----
 
-/// 更新清单 (独立 Pages 项目 dl.mlbosstimer.cc, 经 edgeone CLI 上传; 带 ?t= 时间戳破 CDN 缓存)
-const MANIFEST_URL: &str = "https://dl.mlbosstimer.cc/manifest.json";
+/// 更新清单 (COS 存储桶 mlbosstimer/ 前缀, EdgeOne 加速域名国内直连可达; ?t= 时间戳破 CDN 缓存)
+const MANIFEST_URL: &str = "https://cos.xivstrat.cn/mlbosstimer/manifest.json";
 
 #[derive(serde::Serialize)]
 struct UpdateInfo {
@@ -461,19 +461,16 @@ fn build_http_client(proxy: bool, timeout: Option<Duration>) -> Result<reqwest::
     builder.build().map_err(|e| e.to_string())
 }
 
-/// GET: 系统代理优先 (dl 站点为海外节点, 国内直连常被限速; 浏览器走代理所以网页快),
-/// 无代理或代理不可用走直连兜底
+/// GET: 直连优先 (COS 加速域名国内直连可达), 失败走系统代理兜底 (海外用户)
 async fn http_get(url: &str, timeout: Option<Duration>) -> Result<reqwest::Response, String> {
-    if sync_ws::proxy_addr().is_some() {
-        if let Ok(client) = build_http_client(true, timeout) {
-            if let Ok(resp) = client.get(url).send().await {
-                if resp.status().is_success() {
-                    return Ok(resp);
-                }
+    if let Ok(client) = build_http_client(false, timeout) {
+        if let Ok(resp) = client.get(url).send().await {
+            if resp.status().is_success() {
+                return Ok(resp);
             }
         }
     }
-    let client = build_http_client(false, timeout)?;
+    let client = build_http_client(true, timeout)?;
     let resp = client
         .get(url)
         .send()

@@ -352,13 +352,13 @@ const progText = computed(() => {
 });
 
 // ---- 窗口高度自适应 (两级视图高度不同, 切换时重算; 宽度固定 520) ----
-// 封顶 = 屏幕可用高度 - 边距: 内容超出时 .mainwin 内部滚动条接管
+// 封顶 = 屏幕高度 80%: 内容超出时 .mainwin 内部滚动条接管
 function adjustHeight() {
   requestAnimationFrame(() => {
     const el = document.querySelector(".content");
     if (el) {
       const h = Math.ceil(el.getBoundingClientRect().height) + 40;
-      const cap = (window.screen?.availHeight || 9999) - 80;
+      const cap = Math.floor((window.screen?.height || 1200) * 0.8);
       invoke("set_window_size", { width: 520, height: Math.min(Math.max(400, h), Math.max(400, cap)) });
     }
   });
