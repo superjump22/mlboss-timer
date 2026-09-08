@@ -39,7 +39,6 @@ const dict = {
     language: "语言",
     resetDefaults: "恢复默认",
     done: "完成",
-    settingsHint: "设置保存在本机, 即时生效; 队友互不影响。",
     lockOnTip: "锁定中: 点击穿透 (解锁可拖拽/点击)",
     lockOffTip: "已解锁: 可拖拽, 单击计时, 双击重置",
     dragTip: "拖动面板",
