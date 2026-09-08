@@ -383,6 +383,9 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
+      <!-- 帮助提示 -->
+      <p class="settingsHint">{{ t("settingsHint") }}</p>
     </div>
   </div>
 </template>
@@ -517,11 +520,19 @@ input {
 .settings {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   border-radius: 14px;
   background: rgba(18, 21, 30, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 16px 18px;
+  padding: 16px 18px 12px;
+}
+/* 底部提示: 设置卡片下方, 弱化 */
+.settingsHint {
+  margin: 0;
+  padding: 0 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
 }
 
 /* ---- 通用控件 ---- */
@@ -739,5 +750,8 @@ input {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 8px; /* 与上方设置行拉开间距 */
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07); /* 视觉分组: 操作收尾区 */
 }
 </style>
