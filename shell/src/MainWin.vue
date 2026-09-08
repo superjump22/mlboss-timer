@@ -458,8 +458,8 @@ onMounted(async () => {
             <span class="bcCount">{{ skillsCount(b) }}</span>
           </div>
           <div class="bcGroups">
-            <span v-for="g in b.groups" :key="g.id" class="bcChip">{{
-              locale === "en" && g.labelEn ? g.labelEn : g.label
+            <span v-for="c in b.chips || b.groups" :key="c.id" class="bcChip">{{
+              locale === "en" && c.labelEn ? c.labelEn : c.label
             }}</span>
           </div>
         </button>

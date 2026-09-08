@@ -97,6 +97,12 @@ export const BOSSES = {
     btn: "#5361b5",
     timeFmt: "ms", // 原版网页: cd≥60 → m:ss
     oneGroupPerRow: true, // 每组独占一行 (三行布局)
+    // 选卡胶囊按部位 (左手/中头/右手, 符合 boss 形象); 与悬浮窗行分组 (SED/MESS/DP) 独立
+    chips: [
+      { id: "la", label: "左手", labelEn: "Left Arm" },
+      { id: "mh", label: "中头", labelEn: "Mid Head" },
+      { id: "ra", label: "右手", labelEn: "Right Arm" },
+    ],
     groups: [
       {
         id: "la",
