@@ -203,10 +203,14 @@ function resetDefaults() {
   unlockAudio();
 }
 
-// ---- 更新检查 (GitHub Releases; UI 热更新走 EdgeOne Pages) ----
+// ---- 更新 (EdgeOne manifest 主渠道: 检查 → 窗口内下载(进度) → 安装并重启) ----
 const version = ref("");
-const updateInfo = ref(null); // { version, url, has_update }
-const updateState = ref("idle"); // idle|checking|done|error
+const RELEASES_URL = "https://github.com/superjump22/mlboss-timer/releases/latest"; // 检查/下载失败时手动入口
+const updateInfo = ref(null); // { version, url, sha256, notes_zh, notes_en, has_update }
+const updateState = ref("idle"); // idle|checking|done|downloading|ready|error
+const updateErrKey = ref("checkFailed"); // 失败阶段文案 (checkFailed|downloadFailed)
+const updateProg = ref({ received: 0, total: 0 });
+let setupPath = "";
 
 if (isTauri) {
   window.__TAURI__.app.getVersion().then((v) => (version.value = v)).catch(() => {});
@@ -218,13 +222,47 @@ async function doCheckUpdate() {
     updateInfo.value = await window.__TAURI__.core.invoke("check_update");
     updateState.value = "done";
   } catch (e) {
+    updateErrKey.value = "checkFailed";
     updateState.value = "error";
     console.error(e);
   }
 }
-function openDownload() {
-  if (updateInfo.value?.url) invoke("open_url", { url: updateInfo.value.url });
+async function startDownload() {
+  if (!updateInfo.value?.url) return;
+  updateState.value = "downloading";
+  updateProg.value = { received: 0, total: 0 };
+  try {
+    // 不用 invoke 辅助函数 (它会吞错), 下载失败需要感知
+    setupPath = await window.__TAURI__.core.invoke("download_update", {
+      url: updateInfo.value.url,
+      sha256: updateInfo.value.sha256 || "",
+    });
+    updateState.value = "ready";
+  } catch (e) {
+    updateErrKey.value = "downloadFailed";
+    updateState.value = "error";
+    console.error(e);
+  }
 }
+function installNow() {
+  if (!setupPath) return;
+  window.__TAURI__.core.invoke("install_update", { path: setupPath }).catch((e) => console.error(e));
+}
+function openGitHub() {
+  invoke("open_url", { url: RELEASES_URL });
+}
+const updateNotes = computed(
+  () => (locale.value === "en" ? updateInfo.value?.notes_en : updateInfo.value?.notes_zh) || ""
+);
+const progPct = computed(() => {
+  const { received, total } = updateProg.value;
+  return total > 0 ? Math.min(100, (received / total) * 100) : 0;
+});
+const progText = computed(() => {
+  const { received, total } = updateProg.value;
+  const mb = (n) => (n / 1048576).toFixed(1);
+  return total > 0 ? `${mb(received)}/${mb(total)} MB` : `${mb(received)} MB`;
+});
 
 onMounted(async () => {
   preloadVoices();
@@ -246,6 +284,10 @@ onMounted(async () => {
         syncStatus.value = "idle";
         offsetInput.value = lastOffset(); // 显示记忆值
       });
+      // 下载进度 (Rust download_update 周期上报)
+      await listen("update_progress", (e) => {
+        updateProg.value = { received: e.payload?.received || 0, total: e.payload?.total || 0 };
+      });
     } catch (err) {
       console.error(err);
     }
@@ -256,25 +298,41 @@ onMounted(async () => {
 <template>
   <div class="mainwin">
     <div class="content">
-      <!-- 版本与更新 (置顶, 永远首屏可见) -->
+      <!-- 版本与更新 (置顶, 永远首屏可见): 有更新 → 立即更新 → 下载进度 → 安装并重启 -->
       <div class="versionrow">
         <span class="muted">v{{ version }}</span>
         <button
-          v-if="updateInfo?.has_update"
+          v-if="updateInfo?.has_update && updateState === 'done'"
           class="pill ok updatepill"
-          :title="updateInfo.url"
-          @click="openDownload"
+          :title="updateNotes"
+          @click="startDownload"
         >
-          {{ t("newVersion") }} v{{ updateInfo.version }} · {{ t("download") }}
+          {{ t("newVersion") }} v{{ updateInfo.version }} · {{ t("updateNow") }}
+        </button>
+        <div v-else-if="updateState === 'downloading'" class="progbox">
+          <div class="progbar"><div class="progfill" :style="{ width: progPct + '%' }"></div></div>
+          <span class="progtext">{{ progText }}</span>
+        </div>
+        <button v-else-if="updateState === 'ready'" class="pill ok updatepill" @click="installNow">
+          v{{ updateInfo?.version }} · {{ t("installRestart") }}
+        </button>
+        <button
+          v-else-if="updateState === 'error'"
+          class="muted plain link"
+          :title="RELEASES_URL"
+          @click="openGitHub"
+        >
+          {{ t(updateErrKey) }} · GitHub
         </button>
         <button v-else-if="updateState === 'done'" class="muted plain">
           {{ t("upToDate") }}
         </button>
-        <button v-else-if="updateState === 'error'" class="muted plain">
-          {{ t("checkFailed") }}
-        </button>
         <span class="flex1"></span>
-        <button class="btn ghost sm" :disabled="updateState === 'checking'" @click="doCheckUpdate">
+        <button
+          class="btn ghost sm"
+          :disabled="updateState === 'checking' || updateState === 'downloading'"
+          @click="doCheckUpdate"
+        >
           {{ updateState === "checking" ? t("checking") : t("checkUpdate") }}
         </button>
       </div>
@@ -515,6 +573,41 @@ input {
   border: none;
   cursor: default;
   font-size: 12px;
+}
+.plain.link {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.plain.link:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+/* 下载进度条 */
+.progbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.progbar {
+  flex: 1;
+  max-width: 220px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.progfill {
+  height: 100%;
+  background: #4ade80;
+  border-radius: 4px;
+  transition: width 0.15s;
+}
+.progtext {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
 }
 
 /* ---- 设置 ---- */

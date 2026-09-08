@@ -26,8 +26,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const GAME_CLASS: &str = "MapleStoryClass"; // Phase 0 实测的窗口类名
 const TRACK_MS: u64 = 16; // 高频轮询保证跟随流畅 (~60fps)
-// 前端地址: 线上 EdgeOne Pages (发版即全员热更新); 本地开发时改回 http://localhost:5173
-const DEFAULT_URL: &str = "https://mlboss-timer-qyy7jqqd.edgeone.dev/";
 
 struct AppState {
     game_hwnd: Mutex<isize>,
@@ -294,15 +292,11 @@ async fn open_overlay(app: tauri::AppHandle) -> Result<(), String> {
         log("悬浮窗已存在, 忽略");
         return Ok(());
     }
-    // 悬浮窗加载与主窗口相同的前端 (按窗口 label 分流)
-    let url = app
-        .get_webview_window("main")
-        .and_then(|w| w.url().ok())
-        .unwrap_or_else(|| DEFAULT_URL.parse().unwrap());
+    // 悬浮窗加载与主窗口相同的打包内前端 (按窗口 label 分流; dev 构建自动指向 devUrl)
     let built = WebviewWindowBuilder::new(
         &app,
         "overlay",
-        WebviewUrl::External(url),
+        WebviewUrl::App(PathBuf::from("index.html")),
     )
     .title("boss-timer")
     .inner_size(520.0, 58.0)
@@ -344,16 +338,31 @@ async fn show_main(app: tauri::AppHandle) {
     show_main_win(&app);
 }
 
-// ---- 更新检查 (GitHub Releases; UI 热更新走 EdgeOne Pages, 壳更新走这里) ----
+// ---- 更新 (客户端内下载安装; EdgeOne 静态托管 manifest + 安装包为主渠道) ----
 
-/// GitHub 仓库 (owner/repo), Releases 放 NSIS 安装包
-const UPDATE_REPO: &str = "superjump22/mlboss-timer";
+/// 更新清单 (发布时上传 EdgeOne /dl/; 带 ?t= 时间戳破 CDN 缓存)
+const MANIFEST_URL: &str = "https://mlbosstimer.cc/dl/manifest.json";
 
 #[derive(serde::Serialize)]
 struct UpdateInfo {
     version: String,
-    url: String,
+    url: String, // 安装包下载地址
+    sha256: String,
+    notes_zh: String,
+    notes_en: String,
     has_update: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct Manifest {
+    version: String,
+    setup: String,
+    #[serde(default)]
+    sha256: String,
+    #[serde(default)]
+    notes_zh: String,
+    #[serde(default)]
+    notes_en: String,
 }
 
 /// 剥掉 v 前缀与 prerelease 后缀, 只留 "X.Y.Z" 核心
@@ -361,12 +370,25 @@ fn version_core(s: &str) -> &str {
     s.trim_start_matches('v').split('-').next().unwrap_or("")
 }
 
+/// prerelease 后缀 ("beta.2" 等; 无后缀返回 None)
+fn version_pre(s: &str) -> Option<String> {
+    s.trim_start_matches('v')
+        .split_once('-')
+        .map(|(_, p)| p.to_string())
+}
+
 /// 语义化版本比较: a > b ?
-/// prerelease 后缀 (-beta.N 等) 剥掉不参与比较: 正式通道只看正式版,
-/// beta 用户不会被提示升级到同版本号的正式版 (beta 检测暂不做, 见交接文档 2.5 节)
+/// prerelease 规则: 同核心版本下 正式版 > beta 版; 两个 beta 版比 beta.N 数字
+/// (beta 用户可经客户端内更新升级到更新的 beta, 正式版用户不会被降到 beta)
 fn version_gt(a: &str, b: &str) -> bool {
-    let pa: Vec<u64> = version_core(a).split('.').filter_map(|s| s.parse().ok()).collect();
-    let pb: Vec<u64> = version_core(b).split('.').filter_map(|s| s.parse().ok()).collect();
+    let pa: Vec<u64> = version_core(a)
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let pb: Vec<u64> = version_core(b)
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
     for i in 0..3 {
         let x = pa.get(i).copied().unwrap_or(0);
         let y = pb.get(i).copied().unwrap_or(0);
@@ -374,49 +396,163 @@ fn version_gt(a: &str, b: &str) -> bool {
             return x > y;
         }
     }
-    false
+    // 核心版本相同: 比 prerelease 后缀
+    let beta_n = |s: &str| -> u64 {
+        s.split('.')
+            .nth(1)
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    match (version_pre(a), version_pre(b)) {
+        (None, None) => false,
+        (None, Some(_)) => true, // a 正式 > b beta
+        (Some(_), None) => false,
+        (Some(x), Some(y)) => beta_n(&x) > beta_n(&y),
+    }
 }
 
-/// 检查最新版本: 走 releases/latest 重定向 (不走 GitHub API — 匿名 API 限流 60/h,
-/// 共享代理出口 IP 极易耗尽; 重定向探测无限制), reqwest 自动跟随重定向后读最终 URL
-#[tauri::command]
-async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
-    if UPDATE_REPO.starts_with("REPLACE_ME") {
-        return Err("更新源未配置".into());
-    }
-    let current = app.package_info().version.to_string();
+/// 构建 HTTP 客户端 (proxy=true 时走系统代理; timeout 为总超时, None 仅限连接阶段)
+fn build_http_client(proxy: bool, timeout: Option<Duration>) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .connect_timeout(Duration::from_secs(10))
         .user_agent("mlboss-timer");
-    if let Some(p) = sync_ws::proxy_addr() {
-        if let Ok(proxy) = reqwest::Proxy::all(format!("http://{p}")) {
-            builder = builder.proxy(proxy);
+    if let Some(t) = timeout {
+        builder = builder.timeout(t);
+    }
+    if proxy {
+        if let Some(p) = sync_ws::proxy_addr() {
+            let px = reqwest::Proxy::all(format!("http://{p}")).map_err(|e| e.to_string())?;
+            builder = builder.proxy(px);
         }
     }
-    let client = builder.build().map_err(|e| e.to_string())?;
+    builder.build().map_err(|e| e.to_string())
+}
+
+/// GET: 直连优先 (EdgeOne 国内直连通常可达), 失败走系统代理兜底
+async fn http_get(url: &str, timeout: Option<Duration>) -> Result<reqwest::Response, String> {
+    if let Ok(client) = build_http_client(false, timeout) {
+        if let Ok(resp) = client.get(url).send().await {
+            if resp.status().is_success() {
+                return Ok(resp);
+            }
+        }
+    }
+    let client = build_http_client(true, timeout)?;
     let resp = client
-        .get(format!("https://github.com/{UPDATE_REPO}/releases/latest"))
+        .get(url)
         .send()
         .await
         .map_err(|e| format!("请求失败: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("GitHub {}", resp.status()));
+        return Err(format!("HTTP {}", resp.status()));
     }
-    // 跟随重定向后的最终 URL: .../releases/tag/vX.Y.Z
-    let final_url = resp.url().to_string();
-    let version = final_url
-        .rsplit("/tag/")
-        .next()
-        .unwrap_or("")
-        .trim_start_matches('v')
-        .to_string();
-    if version.is_empty() || !version.contains('.') {
-        return Err(format!("无法解析版本号: {final_url}"));
+    Ok(resp)
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+/// 检查更新: 读 EdgeOne manifest, 版本比较用 version_gt (支持 beta 通道)
+#[tauri::command]
+async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    let current = app.package_info().version.to_string();
+    let url = format!("{MANIFEST_URL}?t={}", now_ms());
+    let resp = http_get(&url, Some(Duration::from_secs(30))).await?;
+    let m: Manifest = resp
+        .json()
+        .await
+        .map_err(|e| format!("manifest 解析失败: {e}"))?;
+    if m.version.is_empty() || !m.version.contains('.') {
+        return Err(format!("manifest 版本号异常: {}", m.version));
     }
-    let url = format!("https://github.com/{UPDATE_REPO}/releases/latest");
-    let has_update = version_gt(&version, &current);
-    log(&format!("更新检查: 当前 {current}, 最新 {version}, has_update={has_update}"));
-    Ok(UpdateInfo { version, url, has_update })
+    let has_update = version_gt(&m.version, &current);
+    log(&format!(
+        "更新检查: 当前 {current}, 最新 {}, has_update={has_update}",
+        m.version
+    ));
+    Ok(UpdateInfo {
+        version: m.version,
+        url: m.setup,
+        sha256: m.sha256,
+        notes_zh: m.notes_zh,
+        notes_en: m.notes_en,
+        has_update,
+    })
+}
+
+/// 流式下载安装包到临时目录, 周期 emit update_progress {received,total}; 完成后校验 sha256
+#[tauri::command]
+async fn download_update(app: tauri::AppHandle, url: String, sha256: String) -> Result<String, String> {
+    use futures_util::StreamExt;
+    use sha2::Digest;
+    use std::io::Write;
+    // 查询参数破缓存 (beta 重复构建同版本号文件名不变)
+    let url = format!("{url}?t={}", now_ms());
+    let resp = http_get(&url, None).await?;
+    let total = resp.content_length().unwrap_or(0);
+    let path = std::env::temp_dir().join("mlboss-timer-setup.exe");
+    let mut file = fs::File::create(&path).map_err(|e| format!("创建临时文件失败: {e}"))?;
+    let mut received: u64 = 0;
+    let mut hasher = sha2::Sha256::new();
+    let mut last_emit = std::time::Instant::now();
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("下载中断: {e}"))?;
+        file.write_all(&chunk).map_err(|e| format!("写入失败: {e}"))?;
+        hasher.update(&chunk);
+        received += chunk.len() as u64;
+        if last_emit.elapsed() >= Duration::from_millis(100) {
+            last_emit = std::time::Instant::now();
+            let _ = app.emit(
+                "update_progress",
+                serde_json::json!({ "received": received, "total": total }),
+            );
+        }
+    }
+    file.flush().map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        "update_progress",
+        serde_json::json!({ "received": received, "total": total }),
+    );
+    if !sha256.is_empty() {
+        let actual = format!("{:x}", hasher.finalize());
+        if !actual.eq_ignore_ascii_case(&sha256) {
+            return Err("sha256 校验失败".into());
+        }
+    }
+    log(&format!(
+        "安装包下载完成: {received} bytes -> {}",
+        path.display()
+    ));
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 运行安装器 (NSIS /S 静默) 并退出应用
+/// 时序: cmd 脚本先 ping 延时 ~1s 等本进程退出 (timeout.exe 在无控制台进程会立即报错, 故用 ping),
+/// 安装完成后 start 重启应用 (安装目录不变, current_exe 路径即新 exe 路径)
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut script = format!("ping -n 2 127.0.0.1 >nul & \"{path}\" /S");
+        if let Ok(exe) = std::env::current_exe() {
+            script.push_str(&format!(" & start \"\" \"{}\"", exe.display()));
+        }
+        std::process::Command::new("cmd")
+            .args(["/c", &script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("启动安装器失败: {e}"))?;
+    }
+    log(&format!("运行安装器并退出: {path}"));
+    app.exit(0);
+    Ok(())
 }
 
 /// 用系统默认浏览器打开 URL (下载页等)
@@ -442,6 +578,29 @@ fn show_main_win(app: &tauri::AppHandle) {
         let _ = m.show();
         let _ = m.unminimize();
         let _ = m.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_gt;
+
+    #[test]
+    fn version_compare() {
+        assert!(version_gt("1.2.0", "1.1.0"));
+        assert!(version_gt("1.2.0", "1.1.9"));
+        assert!(version_gt("v1.2.0", "1.1.0"));
+        assert!(!version_gt("1.1.0", "1.2.0"));
+        assert!(!version_gt("1.2.0", "1.2.0"));
+        // beta 通道: 同核心版本比 beta.N; 正式版 > beta
+        assert!(version_gt("1.2.0-beta.2", "1.2.0-beta.1"));
+        assert!(!version_gt("1.2.0-beta.1", "1.2.0-beta.2"));
+        assert!(!version_gt("1.2.0-beta.2", "1.2.0-beta.2"));
+        assert!(version_gt("1.2.0", "1.2.0-beta.9"));
+        assert!(!version_gt("1.2.0-beta.9", "1.2.0"));
+        // 跨核心版本: 核心版本优先
+        assert!(version_gt("1.3.0-beta.1", "1.2.0"));
+        assert!(!version_gt("1.2.9-beta.9", "1.3.0"));
     }
 }
 
@@ -606,7 +765,7 @@ fn main() {
 
     let mut persisted = load_state_file();
     // v3 迁移: 位置从绝对像素 (rel_x/rel_y) 改为比例 (rel_rx/rel_ry), 旧数据丢弃回默认;
-    // 并移除调试用 url 覆盖 (1.0 起统一走线上 EdgeOne Pages)
+    // 并移除调试用 url 覆盖 (热更新实验遗留, 前端已固定随壳打包)
     if persisted.get("v").and_then(|v| v.as_i64()) != Some(3) {
         if let Some(obj) = persisted.as_object_mut() {
             obj.remove("rel_x");
@@ -619,15 +778,6 @@ fn main() {
         save_state_file(&persisted);
         log("状态文件升级 v3: 面板位置改比例存储, 移除 url 覆盖");
     }
-
-    // 前端地址: 状态文件 url 字段可覆盖 (调试用), 默认线上 EdgeOne Pages
-    let url = persisted
-        .get("url")
-        .and_then(|u| u.as_str())
-        .map(str::to_string)
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_URL.to_string());
-    log(&format!("前端 URL: {url}"));
 
     let state = Arc::new(AppState {
         game_hwnd: Mutex::new(0),
@@ -663,6 +813,8 @@ fn main() {
             close_overlay,
             show_main,
             check_update,
+            download_update,
+            install_update,
             open_url,
             sync_ws::sync_connect,
             sync_ws::sync_send,
