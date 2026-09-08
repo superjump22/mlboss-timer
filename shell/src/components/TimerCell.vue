@@ -13,13 +13,19 @@ const label = computed(() => skillLabel(props.skill));
 // idle/ready 显示值: offset 生效时为 max(5, 原始CD - offset)
 const eff = computed(() => (props.effcd > 0 ? props.effcd : props.skill.cd));
 
+// cd ≥ 60 → m:ss (30:00 / 5:00 / 0:55); < 60 → 纯秒数 (AUF 既有格式, 零回归)
+function fmt(sec) {
+  const s = Math.max(0, Math.round(sec));
+  if (eff.value < 60) return String(s);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 const display = computed(() => {
   const s = props.state;
-  if (!s || s.phase === "idle") return { text: String(eff.value), cls: "idle" };
-  if (s.phase === "ready") return { text: String(eff.value), cls: "ready" };
-  const r = Math.ceil(s.remain);
-  if (s.remain <= props.skill.warn) return { text: String(r), cls: "warn" };
-  return { text: String(r), cls: "run" };
+  if (!s || s.phase === "idle") return { text: fmt(eff.value), cls: "idle" };
+  if (s.phase === "ready") return { text: fmt(eff.value), cls: "ready" };
+  if (s.remain <= props.skill.warn) return { text: fmt(Math.ceil(s.remain)), cls: "warn" };
+  return { text: fmt(Math.ceil(s.remain)), cls: "run" };
 });
 
 // 单击/双击判别: 260ms 内第二击 = 双击
