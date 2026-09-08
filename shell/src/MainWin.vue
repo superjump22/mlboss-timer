@@ -344,7 +344,17 @@ onMounted(async () => {
             </div>
           </div>
           <div class="setrow">
-            <span class="setlabel" :title="t('offsetTip')">{{ t("offsetLabel") }}</span>
+            <span class="setlabel">
+              {{ t("offsetLabel") }}
+              <span class="helpicon" tabindex="0">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9.5" stroke-width="1.8" />
+                  <path d="M9.6 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.6 2.2-2.6 3.5" />
+                  <circle cx="12" cy="17" r="0.4" fill="currentColor" stroke="none" />
+                </svg>
+                <span class="helptip">{{ t("offsetTip") }}</span>
+              </span>
+            </span>
             <div class="offsetbox">
               <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{ offsetMsg.text }}</span>
               <input
@@ -368,6 +378,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="dialogrow">
+            <span class="flex1"></span>
             <button class="btn ghost sm" @click="resetDefaults">{{ t("resetDefaults") }}</button>
           </div>
         </div>
@@ -599,6 +610,47 @@ input {
 }
 .setlabel {
   flex-shrink: 0;
+}
+/* 问号帮助图标: hover/聚焦显示说明气泡 */
+.helpicon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: help;
+  vertical-align: middle;
+}
+.helpicon:hover,
+.helpicon:focus {
+  color: rgba(255, 255, 255, 0.75);
+  outline: none;
+}
+.helptip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  bottom: 100%;
+  width: max-content;
+  max-width: 240px;
+  background: rgba(13, 15, 21, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, transform 0.12s;
+  z-index: 5;
+}
+.helpicon:hover .helptip,
+.helpicon:focus .helptip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 .keybtn {
   min-width: 140px;
