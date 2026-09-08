@@ -283,9 +283,9 @@ function resetDefaults() {
   panelOpacity.value = 0.85;
   uiScale.value = 1;
   timeFmtVal.value = BOSSES[activeBoss.value]?.timeFmt || "ms"; // 恢复原版默认格式
+  timeFmtRef.value = timeFmtVal.value;
   localStorage.removeItem(`timeFmt_${activeBoss.value}`);
   if (activeBoss.value === "pb") setShowSupport(true);
-  setLocale("zh");
   persistSettings();
   unlockAudio();
 }

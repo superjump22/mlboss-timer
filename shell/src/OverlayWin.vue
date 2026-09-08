@@ -248,7 +248,8 @@ function schedulePushRegions() {
     requestAnimationFrame(pushRegionsNow);
   });
 }
-watch([locked, uiScale, locale, showSupport, () => gameWins.value.length], schedulePushRegions);
+// 名字变化 (格子宽度按名字截断固定, 但保险起见一并触发测量/穿透刷新)
+watch([locked, uiScale, locale, showSupport, pbNames, () => gameWins.value.length], schedulePushRegions);
 
 // ---- 自定义拖拽 (不走 OS 拖拽循环 → 方向键等游戏按键不影响) ----
 let dragStart = null; // {sx, sy(屏幕), wx, wy(窗口逻辑位置)}
@@ -290,7 +291,7 @@ async function reportBaseSize() {
   });
 }
 // 所有尺寸相关变化 (含 mount 时拉取的 gameFactor) 统一走 watch, 不手动调用避免竞态
-watch([locked, uiScale, gameFactor, locale, showSupport, () => gameWins.value.length], reportBaseSize, { flush: "post" });
+watch([locked, uiScale, gameFactor, locale, showSupport, pbNames, () => gameWins.value.length], reportBaseSize, { flush: "post" });
 
 // ---- 生命周期 ----
 let unlisteners = [];
