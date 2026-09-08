@@ -5,7 +5,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { BossSync } from "./sync.js";
 import { preloadVoices, unlockAudio } from "./voice.js";
-import { locale, setLocale as baseSetLocale, t, timeFmt as timeFmtRef } from "./i18n.js";
+import { locale, setLocale as baseSetLocale, t, timeFmt as timeFmtRef, localeOf } from "./i18n.js";
 import { BOSSES, timeFmtOf } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
@@ -25,7 +25,7 @@ function selectBoss(id) {
   activeBoss.value = id;
   localStorage.setItem("activeBoss", id);
   view.value = "boss";
-  reloadAppearance(); // 外观设置读对应 boss 分 key
+  reloadBossSettings(); // 一切设置 per-boss: 切换即重读 (无共享状态)
 }
 function backToSelect() {
   if (inRoom.value) leaveRoom();
@@ -133,7 +133,9 @@ const offsetMsg = ref(null); // {key, n, ok} 渲染时翻译 → 语言切换实
 let offsetMsgTimer = null;
 let awaitRoomState = false; // join 后等首个 room_state_sync 判定空房间
 function lastOffset() {
-  return parseInt(localStorage.getItem("lastOffset") || "0", 10) || 0;
+  // per-boss 记忆 (旧全局 lastOffset 一次性迁移)
+  const v = localStorage.getItem(`lastOffset_${activeBoss.value}`) ?? localStorage.getItem("lastOffset");
+  return parseInt(v || "0", 10) || 0;
 }
 function showOffsetMsg(key, n, ok) {
   offsetMsg.value = { key, n, ok };
@@ -162,7 +164,7 @@ sync.onOffsetChange = (n, source) => {
     return;
   }
   offsetInput.value = n;
-  localStorage.setItem("lastOffset", String(n)); // 历史记忆 (本地改/房间同步均更新)
+  localStorage.setItem(`lastOffset_${activeBoss.value}`, String(n)); // per-boss 记忆 (本地改/房间同步均更新)
   if (source === "remote" || (source === "joined" && n > 0)) showOffsetMsg("offsetSynced", n, true); // 队友改动/加入已有偏移房间 → 统一提示
   else if (source === "local") showOffsetMsg("offsetApplied", n, true);
 };
@@ -175,7 +177,7 @@ function applyOffset() {
   offsetInput.value = v;
   if (!sync.room) {
     // 未进房: 仅更新记忆值 (下次建房/进空房时生效)
-    localStorage.setItem("lastOffset", String(v));
+    localStorage.setItem(`lastOffset_${activeBoss.value}`, String(v));
     showOffsetMsg("offsetSaved", v, true);
     return;
   }
@@ -213,12 +215,11 @@ function backToGame() {
   invoke("focus_game");
 }
 
-// ---- 设置 (声音/语言/offset 全局; 透明度/缩放按 boss 分 key — 悬浮窗设置独立) ----
-// lsGet: 优先 {key}_{boss}, 回退旧全局 {key} (v1.1.x 迁移)
+// ---- 设置 (全部 per-boss 隔离, 无共享; 旧全局 key 仅作一次性迁移回退) ----
 function lsGet(key, fallback) {
   return localStorage.getItem(`${key}_${activeBoss.value}`) ?? localStorage.getItem(key) ?? fallback;
 }
-const soundMode = ref(localStorage.getItem("soundMode") || "beep");
+const soundMode = ref(lsGet("soundMode", "beep"));
 const SOUND_OPTIONS = [
   { value: "voice", label: () => t("voice") },
   { value: "beep", label: () => t("beep") },
@@ -228,7 +229,7 @@ const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
 
 function persistSettings() {
-  localStorage.setItem("soundMode", soundMode.value);
+  localStorage.setItem(`soundMode_${activeBoss.value}`, soundMode.value);
   localStorage.setItem(`panelOpacity_${activeBoss.value}`, String(panelOpacity.value));
   localStorage.setItem(`uiScale_${activeBoss.value}`, String(uiScale.value));
   emit("settings-changed");
@@ -241,15 +242,21 @@ function setSoundMode(m) {
 function applyAppearance() {
   persistSettings();
 }
-// 切 boss 后重读外观值 (滑块显示对应 boss 的设置)
-function reloadAppearance() {
+// 切 boss 后重读全部设置 (滑块/开关显示对应 boss 的值)
+function reloadBossSettings() {
+  soundMode.value = lsGet("soundMode", "beep");
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
+  timeFmtVal.value = timeFmtOf(activeBoss.value);
+  timeFmtRef.value = timeFmtVal.value;
+  if (activeBoss.value === "pb")
+    showSupport.value = localStorage.getItem("showSupport_pb") !== "0";
+  locale.value = localeOf(activeBoss.value); // 语言 per-boss
+  if (!inRoom.value) offsetInput.value = lastOffset();
 }
+
 // 时间显示格式 (per-boss, 默认按原版网页: AUF 秒数 / PB、HT 分秒): "ms" | "sec"
-// 悬浮窗 reloadLocale 时按自己 boss 的 key 重读
 const timeFmtVal = ref(timeFmtOf(activeBoss.value));
-watch(activeBoss, () => (timeFmtVal.value = timeFmtOf(activeBoss.value)));
 function setTimeFmt(v) {
   timeFmtVal.value = v;
   localStorage.setItem(`timeFmt_${activeBoss.value}`, v);
@@ -257,21 +264,18 @@ function setTimeFmt(v) {
   emit("settings-changed");
 }
 
-// PB 支援技能显示开关 (R/TL 位; per-boss, 默认显示)
+// PB 支援技能显示开关 (R/TL 位; 默认显示)
 const showSupport = ref(localStorage.getItem("showSupport_pb") !== "0");
-watch(activeBoss, () => {
-  if (activeBoss.value === "pb")
-    showSupport.value = localStorage.getItem("showSupport_pb") !== "0";
-});
 function setShowSupport(v) {
   showSupport.value = v;
   localStorage.setItem("showSupport_pb", v ? "1" : "0");
   emit("settings-changed");
 }
 
-// 语言切换: 写 localStorage + 通知悬浮窗
+// 语言切换 (per-boss): 写 locale_{boss} + 通知悬浮窗
 function setLocale(l) {
   baseSetLocale(l);
+  localStorage.setItem(`locale_${activeBoss.value}`, l);
   emit("settings-changed");
 }
 function resetDefaults() {
@@ -348,12 +352,14 @@ const progText = computed(() => {
 });
 
 // ---- 窗口高度自适应 (两级视图高度不同, 切换时重算; 宽度固定 520) ----
+// 封顶 = 屏幕可用高度 - 边距: 内容超出时 .mainwin 内部滚动条接管
 function adjustHeight() {
   requestAnimationFrame(() => {
     const el = document.querySelector(".content");
     if (el) {
       const h = Math.ceil(el.getBoundingClientRect().height) + 40;
-      invoke("set_window_size", { width: 520, height: Math.max(400, h) });
+      const cap = (window.screen?.availHeight || 9999) - 80;
+      invoke("set_window_size", { width: 520, height: Math.min(Math.max(400, h), Math.max(400, cap)) });
     }
   });
 }
@@ -385,7 +391,10 @@ onMounted(async () => {
 
 <template>
   <div class="mainwin">
-    <div class="content">
+    <div
+      class="content"
+      :style="view === 'boss' ? { '--boss-color': bossDef.color, '--boss-btn': bossDef.btn } : undefined"
+    >
       <!-- 版本与更新 (置顶, 永远首屏可见): 有更新 → 立即更新 → 下载进度 → 安装并重启 -->
       <div class="versionrow">
         <span class="muted">v{{ version }}</span>
@@ -451,7 +460,7 @@ onMounted(async () => {
 
       <!-- ===== 视图二: 加房 + 该 Boss 设置 (主题色随 boss) ===== -->
       <template v-else>
-        <div class="section" :style="{ '--boss-color': bossDef.color }">
+        <div class="section">
           <div class="bosHead">
             <button class="btn ghost sm" @click="backToSelect">
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
@@ -490,7 +499,6 @@ onMounted(async () => {
 
           <!-- PB 专属: 队友名字 (纯本地) — R 5 列一行 / TL 3 列一行 -->
           <div v-if="activeBoss === 'pb'" class="namesedit">
-            <div class="namesTitle">{{ t("pbNamesTitle") }}</div>
             <div class="namesblock">
               <div class="nbHead">
                 <span class="nbTag">R</span><span class="nbLabel">{{ t("pbGroupRes") }}</span>
@@ -521,8 +529,8 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 设置 (声音/语言/offset 全局; 透明度/缩放/格式 per-boss; 主题色随 boss) -->
-        <div class="section" :style="{ '--boss-color': bossDef.color }">
+        <!-- 设置 (全部 per-boss; 主题色随 boss) -->
+        <div class="section">
           <div class="secTitle">{{ t("settingsSection") }}</div>
           <div class="settings">
             <div v-if="activeBoss === 'pb'" class="setrow">
@@ -866,7 +874,7 @@ input {
   border-color: rgba(74, 222, 128, 0.6);
 }
 .btn {
-  background: #2d6a4f;
+  background: var(--boss-btn, #2d6a4f); /* Boss 视图内随主题色, 其余场景默认绿 */
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -1078,13 +1086,6 @@ input {
   border-radius: 14px;
   background: rgba(18, 21, 30, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-.namesTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.55);
-  letter-spacing: 1px;
-  margin-bottom: -4px;
 }
 .namesblock {
   display: flex;

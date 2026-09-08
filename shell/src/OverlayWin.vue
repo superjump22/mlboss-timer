@@ -25,12 +25,15 @@ function lsGet(key, fallback) {
 const SKILLS = skillsOf(boss);
 // PB 支援技能开关 (R/TL 位; 默认显示, 主窗口设置经 settings-changed 通知)
 const showSupport = ref(lsGet("showSupport", "1") === "1");
-// 分组装箱: 每行技能数上限 8 (AUF 4+2=6 单行; PB 4 | 5+3 两行; HT 左6+中2 | 右4 两行)
+// 分组装箱: HT 每组独占一行 (仿原版三行); 其余每行技能数上限 8 (AUF 单行, PB 4 | 5+3)
 const CELL_ROW_CAP = 8;
 const rows = computed(() => {
   const groups = (BOSSES[boss]?.groups || []).filter(
     (g) => showSupport.value || !g.support
   );
+  if (BOSSES[boss]?.oneGroupPerRow) {
+    return groups.map((g) => [g]);
+  }
   const rows = [];
   let cur = [];
   let curN = 0;
@@ -88,8 +91,8 @@ const tickSent = {};
 const completedSent = new Set();
 const announced = new Set();
 
-// ---- 外观/声音 (声音全局; 透明度/缩放 per-boss; 主窗口设置时经 settings-changed 通知) ----
-const soundMode = ref(localStorage.getItem("soundMode") || "beep");
+// ---- 外观/声音 (全部 per-boss; 主窗口设置时经 settings-changed 通知) ----
+const soundMode = ref(lsGet("soundMode", "beep"));
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
 // 游戏缩放系数 (Rust 下发 = 游戏客户区宽/1600); 面板总 zoom = uiScale × gameFactor × 0.8
@@ -98,8 +101,8 @@ const BASE_SIZE_FACTOR = 0.8;
 const gameFactor = ref(1);
 const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FACTOR);
 function reloadAppearance() {
-  reloadLocale(); // 语言/时间格式跟随主窗口设置
-  soundMode.value = localStorage.getItem("soundMode") || "beep";
+  reloadLocale(); // 语言/时间格式跟随主窗口设置 (per-boss)
+  soundMode.value = lsGet("soundMode", "beep");
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
   showSupport.value = lsGet("showSupport", "1") === "1"; // PB 支援技能开关

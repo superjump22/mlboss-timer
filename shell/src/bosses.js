@@ -4,6 +4,8 @@
 // - label 即 nameable 格子的占位符 (无自定义名字时显示)
 // - tint (HT): 格子背景色 = 部位区分; color = 技能名色 = 类型区分 (SED 橙 / MESS 蓝 / DP 红)
 // - timeFmt 默认值按原版网页: AUF 纯秒数, PB/HT 分秒 (cd≥60)
+// - color/btn: 主题色 (强调/按钮), 按 boss 隔离; AUF 沿用原绿色
+// - oneGroupPerRow: HT 每组独占一行 (仿原版三行布局)
 // 语音措辞与 scripts/gen_voices.py 短语表保持一致
 
 export const BOSSES = {
@@ -11,7 +13,8 @@ export const BOSSES = {
     id: "auf",
     label: "AUF",
     full: "Aufheben",
-    color: "#b95cff",
+    color: "#4ade80",
+    btn: "#2d6a4f", // 原版按钮绿
     timeFmt: "sec", // 原版网页: 纯秒数
     groups: [
       {
@@ -41,7 +44,8 @@ export const BOSSES = {
     id: "pb",
     label: "PB",
     full: "Pink Bean",
-    color: "#ff8fd0",
+    color: "#f5a3cf", // 柔粉 (不刺眼)
+    btn: "#b25d87",
     timeFmt: "ms", // 原版网页: m:ss (R1 = 30:00)
     supportHidden: true, // 有"显示支援技能"开关 (R/TL 位)
     groups: [
@@ -53,7 +57,7 @@ export const BOSSES = {
           { id: "dr", pid: "dr", label: "反伤", labelEn: "DR", cd: 60, warn: 5, color: "#b95cff", voice: "反伤好了", voiceEn: "DR ready" },
           { id: "zombie", pid: "zombie", label: "僵尸", labelEn: "Zombify", cd: 120, warn: 5, color: "#9dff57", voice: "僵尸好了", voiceEn: "Zombie ready" },
           { id: "sed", pid: "sed", label: "诱惑", labelEn: "SED", cd: 40, warn: 5, color: "#ffa930", voice: "诱惑好了", voiceEn: "Sed ready" },
-          { id: "mini", pid: "mini", label: "mini", labelEn: "Mini", cd: 60, warn: 5, color: "#4dd2ff", voice: "mini好了", voiceEn: "mini ready" },
+          { id: "mini", pid: "mini", label: "Mini", labelEn: "Mini", cd: 60, warn: 5, color: "#4dd2ff", voice: "mini好了", voiceEn: "mini ready" },
         ],
       },
       {
@@ -83,14 +87,16 @@ export const BOSSES = {
     ],
   },
 
-  // HT 组序 = 左手 → 中头 → 右手 (符合 boss 形象: 左 中 右)
-  // 部位 tint (格子背景): 左暖 / 中紫 / 右冷; 类型色 (技能名): SED 橙 / MESS 蓝 / DP 红
+  // HT 仿原版三行: 第一行左手 SED+MESS, 第二行右手 SED+MESS, 第三行各部位 DP
+  // 部位 tint (格子背景): 左暖 / 右冷; 类型色 (技能名): SED 橙 / MESS 蓝 / DP 红
   ht: {
     id: "ht",
     label: "HT",
     full: "Horntail",
-    color: "#ff5c5c",
+    color: "#8fa4ff", // 柔蓝紫 (不刺眼)
+    btn: "#5361b5",
     timeFmt: "ms", // 原版网页: cd≥60 → m:ss
+    oneGroupPerRow: true, // 每组独占一行 (三行布局)
     groups: [
       {
         id: "la",
@@ -102,18 +108,6 @@ export const BOSSES = {
           { id: "laSed2", pid: "laSed2", label: "左手SED2", labelEn: "LA SED#2", cd: 180, warn: 5, color: "#ffa930", voice: "左手SED2好了", voiceEn: "LA SED 2 ready" },
           { id: "laSed3", pid: "laSed3", label: "左手SED3", labelEn: "LA SED#3", cd: 180, warn: 5, color: "#ffa930", voice: "左手SED3好了", voiceEn: "LA SED 3 ready" },
           { id: "laMass", pid: "laMass", label: "左手MESS", labelEn: "LA MASS", cd: 60, warn: 5, color: "#4dd2ff", voice: "左手MESS好了", voiceEn: "LA MASS ready" },
-          { id: "laDp1", pid: "laDp1", label: "左手DP1", labelEn: "LA DP#1", cd: 300, warn: 5, color: "#ff4d4d", voice: "左手DP1好了", voiceEn: "LA DP 1 ready" },
-          { id: "laDp2", pid: "laDp2", label: "左手DP2", labelEn: "LA DP#2", cd: 180, warn: 5, color: "#ff4d4d", voice: "左手DP2好了", voiceEn: "LA DP 2 ready" },
-        ],
-      },
-      {
-        id: "mh",
-        label: "中头",
-        labelEn: "Mid Head",
-        tint: "rgba(200, 130, 255, 0.10)",
-        skills: [
-          { id: "mhDp1", pid: "mhDp1", label: "中头DP1", labelEn: "MH DP#1", cd: 300, warn: 5, color: "#ff4d6d", voice: "中头DP1好了", voiceEn: "MH DP 1 ready" },
-          { id: "mhDp2", pid: "mhDp2", label: "中头DP2", labelEn: "MH DP#2", cd: 180, warn: 5, color: "#ff4d6d", voice: "中头DP2好了", voiceEn: "MH DP 2 ready" },
         ],
       },
       {
@@ -126,6 +120,17 @@ export const BOSSES = {
           { id: "raSed2", pid: "raSed2", label: "右手SED2", labelEn: "RA SED#2", cd: 180, warn: 5, color: "#ffa930", voice: "右手SED2好了", voiceEn: "RA SED 2 ready" },
           { id: "raSed3", pid: "raSed3", label: "右手SED3", labelEn: "RA SED#3", cd: 180, warn: 5, color: "#ffa930", voice: "右手SED3好了", voiceEn: "RA SED 3 ready" },
           { id: "raMass", pid: "raMass", label: "右手MESS", labelEn: "RA MASS", cd: 60, warn: 5, color: "#4dd2ff", voice: "右手MESS好了", voiceEn: "RA MASS ready" },
+        ],
+      },
+      {
+        id: "dp",
+        label: "消buff",
+        labelEn: "DP",
+        skills: [
+          { id: "laDp1", pid: "laDp1", label: "左手DP1", labelEn: "LA DP#1", cd: 300, warn: 5, color: "#ff4d4d", voice: "左手DP1好了", voiceEn: "LA DP 1 ready" },
+          { id: "laDp2", pid: "laDp2", label: "左手DP2", labelEn: "LA DP#2", cd: 180, warn: 5, color: "#ff4d4d", voice: "左手DP2好了", voiceEn: "LA DP 2 ready" },
+          { id: "mhDp1", pid: "mhDp1", label: "中头DP1", labelEn: "MH DP#1", cd: 300, warn: 5, color: "#ff4d6d", voice: "中头DP1好了", voiceEn: "MH DP 1 ready" },
+          { id: "mhDp2", pid: "mhDp2", label: "中头DP2", labelEn: "MH DP#2", cd: 180, warn: 5, color: "#ff4d6d", voice: "中头DP2好了", voiceEn: "MH DP 2 ready" },
         ],
       },
     ],
@@ -145,10 +150,8 @@ export function activeBossId() {
   return BOSSES[v] ? v : "auf";
 }
 
-// 时间格式 per-boss: timeFmt_{boss} → 旧全局 timeFmt (beta.9 迁移) → 原版默认
+// 时间格式 per-boss: timeFmt_{boss} → 该 boss 原版默认 (不回退旧全局 key, 彻底隔离)
 export function timeFmtOf(bossId) {
   const b = BOSSES[bossId] || BOSSES.auf;
-  return (
-    localStorage.getItem(`timeFmt_${bossId}`) || localStorage.getItem("timeFmt") || b.timeFmt
-  );
+  return localStorage.getItem(`timeFmt_${bossId}`) || b.timeFmt;
 }

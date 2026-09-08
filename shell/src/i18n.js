@@ -56,7 +56,6 @@ const dict = {
     off: "隐藏",
     pbGroupRes: "复活术",
     pbGroupTl: "伺机待发",
-    pbNamesTitle: "队友名字（R=复活位 / TL=Time Leap 位，仅本机）",
     namesPh: "名字",
     namesSave: "保存名字",
     namesSaved: "名字已保存",
@@ -129,7 +128,6 @@ const dict = {
     off: "Hide",
     pbGroupRes: "Res",
     pbGroupTl: "Time Leap",
-    pbNamesTitle: "Player names (R = Res / TL = Time Leap, local only)",
     namesPh: "Name",
     namesSave: "Save names",
     namesSaved: "Names saved",
@@ -152,9 +150,13 @@ const dict = {
 
 export const locale = ref(localStorage.getItem("locale") || "zh");
 
-// 时间显示格式: "ms" = 分秒 (5:00) | "sec" = 纯秒数 (300)
-// per-boss 偏好 (timeFmt_{boss}); 当前窗口锁定一个 boss, 主窗口改设置经 settings-changed 通知悬浮窗 reload
+// 语言与时间格式均 per-boss (彻底隔离, 无共享设置)
+// locale_{boss} → 旧全局 locale (一次性迁移) → zh; timeFmt_{boss} → boss 原版默认
 import { timeFmtOf, activeBossId } from "./bosses.js";
+export function localeOf(bossId) {
+  return localStorage.getItem(`locale_${bossId}`) || localStorage.getItem("locale") || "zh";
+}
+locale.value = localeOf(activeBossId());
 export const timeFmt = ref(timeFmtOf(activeBossId()));
 
 export function t(key) {
@@ -166,11 +168,11 @@ export function setLocale(l) {
   localStorage.setItem("locale", l);
 }
 
-// 多窗口同步: localStorage 变化时刷新 (Tauri 双窗口内存不共享)
+// 多窗口同步: localStorage 变化时刷新 (Tauri 双窗口内存不共享; 悬浮窗锁定自己的 boss)
 export function reloadLocale() {
-  const saved = localStorage.getItem("locale");
-  if (saved && saved !== locale.value) {
-    locale.value = saved;
+  const l = localeOf(activeBossId());
+  if (l !== locale.value) {
+    locale.value = l;
   }
   const fmt = timeFmtOf(activeBossId());
   if (fmt !== timeFmt.value) {
