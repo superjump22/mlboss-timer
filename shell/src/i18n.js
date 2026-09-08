@@ -92,6 +92,7 @@ const dict = {
     offsetSaved: "Saved {n}s for new rooms",
     offsetAuto: "Auto-applied {n}s",
     offsetSynced: "Synced {n}s (room)",
+    offsetRoomJoined: "Synced room offset {n}s",
     offsetUnchanged: "Offset unchanged",
     language: "Language",
     resetDefaults: "Reset defaults",

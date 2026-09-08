@@ -104,7 +104,7 @@ sync.onRoomState = (timers) => {
     const last = lastOffset();
     if (last > 0) {
       sync.setOffset(last); // onOffsetChange 会刷新输入框+记忆
-      showOffsetMsg(t("offsetAuto").replace("{n}", last), true);
+      showOffsetMsg("offsetAuto", last, true);
     }
   }
 };
@@ -115,13 +115,14 @@ sync.onOffsetChange = (n, source) => {
   }
   offsetInput.value = n;
   localStorage.setItem("lastOffset", String(n)); // 历史记忆 (本地改/房间同步均更新)
-  if (source === "remote") showOffsetMsg(t("offsetSynced").replace("{n}", n), true);
-  else if (source === "local") showOffsetMsg(t("offsetApplied").replace("{n}", n), true);
+  if (source === "remote") showOffsetMsg("offsetSynced", n, true);
+  else if (source === "local") showOffsetMsg("offsetApplied", n, true);
+  else if (source === "joined" && n > 0) showOffsetMsg("offsetRoomJoined", n, true); // 加入已有偏移的房间
 };
 function applyOffset() {
   const v = Math.round(Number(offsetInput.value));
   if (offsetInput.value === "" || !Number.isInteger(v) || v < 0 || v > 30) {
-    showOffsetMsg(t("offsetErr"), false);
+    showOffsetMsg("offsetErr", null, false);
     return;
   }
   offsetInput.value = v;
@@ -647,11 +648,10 @@ input {
 }
 .helptip {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  left: 0; /* 锚定图标左缘向右展开: 居中定位在 520px 窄窗口会被左缘截断 */
   bottom: 100%;
   width: max-content;
-  max-width: 240px;
+  max-width: 250px;
   background: rgba(13, 15, 21, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
@@ -663,13 +663,14 @@ input {
   text-align: left;
   opacity: 0;
   pointer-events: none;
+  transform: translateY(4px);
   transition: opacity 0.12s, transform 0.12s;
   z-index: 5;
 }
 .helpicon:hover .helptip,
 .helpicon:focus .helptip {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 .keybtn {
   min-width: 140px;
