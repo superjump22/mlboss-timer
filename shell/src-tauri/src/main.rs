@@ -29,9 +29,24 @@ const TRACK_MS: u64 = 16; // 高频轮询保证跟随流畅 (~60fps)
 
 struct AppState {
     game_hwnd: Mutex<isize>,
+    // 当前 boss (悬浮窗位置按 boss 分 key 持久化: rel_rx_{boss}; 切 boss 时由 open_overlay 更新)
+    boss: Mutex<String>,
     // 面板相对游戏客户区的位置 (比例 0~1, 游戏窗口缩放时等比例跟随); NaN = 未设置(首次默认右上角)
     rel: Mutex<(f64, f64)>,
     hit_regions: Mutex<Vec<(i32, i32, i32, i32)>>, // 可交互区域 (物理像素, 客户区坐标 l,t,r,b)
+}
+
+/// 按 boss 读面板位置 (rel_rx_{boss}); 无记录时回退旧全局 rel_rx (v1.1.x 迁移, 各 boss 首次继承既有位置)
+fn load_rel(persisted: &serde_json::Value, boss: &str) -> (f64, f64) {
+    let rx = persisted[format!("rel_rx_{boss}")]
+        .as_f64()
+        .or_else(|| persisted["rel_rx"].as_f64())
+        .unwrap_or(f64::NAN);
+    let ry = persisted[format!("rel_ry_{boss}")]
+        .as_f64()
+        .or_else(|| persisted["rel_ry"].as_f64())
+        .unwrap_or(f64::NAN);
+    (rx, ry)
 }
 
 /// 面板尺寸缩放基准: 游戏客户区宽 1600px 时悬浮窗为上报的基准尺寸 (1:1)
@@ -284,14 +299,32 @@ async fn set_window_pos(win: tauri::WebviewWindow, x: i32, y: i32) {
 }
 
 /// 创建悬浮窗 (进房后由主窗口调用; 主窗口不隐藏, 继续作为管理中心)
+/// boss: 当前 boss id, 面板位置按 boss 分 key 加载 (auf/pb/ht)
 /// async: 同步命令在 UI 主线程执行, 其中 build 窗口会死锁
 #[tauri::command]
-async fn open_overlay(app: tauri::AppHandle) -> Result<(), String> {
+async fn open_overlay(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+    boss: Option<String>,
+) -> Result<(), String> {
     log("open_overlay 调用");
-    if app.get_webview_window("overlay").is_some() {
-        log("悬浮窗已存在, 忽略");
-        return Ok(());
+    // 已存在则强制重建 (切 boss 场景: leaveRoom 的 close_overlay 是异步的, 可能尚未注销)
+    if let Some(ov) = app.get_webview_window("overlay") {
+        let _ = ov.destroy();
+        for _ in 0..100 {
+            if app.get_webview_window("overlay").is_none() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
     }
+    let boss = boss.unwrap_or_else(|| "auf".to_string());
+    {
+        let persisted = load_state_file();
+        *state.rel.lock().unwrap() = load_rel(&persisted, &boss);
+        *state.boss.lock().unwrap() = boss.clone();
+    }
+    log(&format!("boss={boss}, 已加载对应面板位置"));
     // 悬浮窗加载与主窗口相同的打包内前端 (按窗口 label 分流; dev 构建自动指向 devUrl)
     let built = WebviewWindowBuilder::new(
         &app,
@@ -739,11 +772,12 @@ fn spawn_tracker(app: tauri::AppHandle, state: Arc<AppState>) {
                             let nrx = (pos.0 - client.left) as f64 / client.w.max(1) as f64;
                             let nry = (pos.1 - client.top) as f64 / client.h.max(1) as f64;
                             *state.rel.lock().unwrap() = (nrx, nry);
+                            let boss = state.boss.lock().unwrap().clone();
                             let mut st = load_state_file();
-                            st["rel_rx"] = serde_json::json!(nrx);
-                            st["rel_ry"] = serde_json::json!(nry);
+                            st[format!("rel_rx_{boss}")] = serde_json::json!(nrx);
+                            st[format!("rel_ry_{boss}")] = serde_json::json!(nry);
                             save_state_file(&st);
-                            log(&format!("面板拖拽完成, 新相对比例 ({nrx:.3},{nry:.3})"));
+                            log(&format!("面板拖拽完成, 新相对比例 ({nrx:.3},{nry:.3}) [boss={boss}]"));
                             deviate = 0;
                         }
                     } else {
@@ -781,10 +815,8 @@ fn main() {
 
     let state = Arc::new(AppState {
         game_hwnd: Mutex::new(0),
-        rel: Mutex::new((
-            persisted["rel_rx"].as_f64().unwrap_or(f64::NAN),
-            persisted["rel_ry"].as_f64().unwrap_or(f64::NAN),
-        )),
+        boss: Mutex::new("auf".to_string()),
+        rel: Mutex::new(load_rel(&persisted, "auf")),
         hit_regions: Mutex::new(Vec::new()),
     });
 

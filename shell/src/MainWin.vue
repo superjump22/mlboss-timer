@@ -1,10 +1,11 @@
 <script setup>
-// 主客户端窗口 = 计时器管理中心: 计时器卡片(AUF, 未来加 HT 等) + 设置 + 帮助
+// 主客户端窗口 = 计时器管理中心: 三 boss 卡片(AUF/PB/HT) + 设置 + 帮助
 // 建房后悬浮窗创建, 本窗口保持显示; X = 最小化到托盘
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { BossSync } from "./sync.js";
 import { preloadVoices, unlockAudio } from "./voice.js";
 import { locale, setLocale as baseSetLocale, t } from "./i18n.js";
+import { BOSSES } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
 const invoke = (cmd, args) =>
@@ -12,12 +13,16 @@ const invoke = (cmd, args) =>
 const emit = (event, payload) =>
   isTauri ? window.__TAURI__.event.emit(event, payload).catch(() => {}) : null;
 
-// ---- 房间 ----
+// ---- Boss 卡片 (单房间模型: 同时只有一个活跃房间, 切卡 = 离开旧房 + 新建房) ----
+const bossList = Object.values(BOSSES);
 const sync = new BossSync();
 const inRoom = ref(false);
 const syncStatus = ref("idle");
-const roomInput = ref(localStorage.getItem("room") || "");
+const activeBoss = ref(localStorage.getItem("activeBoss") || "auf"); // UI/设置分区用; 合法性由 bosses.js 保证
+const roomInputs = reactive({});
+for (const b of bossList) roomInputs[b.id] = localStorage.getItem(`room_${b.id}`) || "";
 const roomErr = ref("");
+const errBoss = ref("");
 sync.onStatus = (s) => (syncStatus.value = s);
 sync.onJoined = () => (inRoom.value = true);
 
@@ -33,6 +38,7 @@ const statusText = computed(
 const statusCls = computed(
   () => ({ connected: "ok", reconnecting: "warn", failed: "err" }[syncStatus.value] || "")
 );
+const activeCard = (b) => inRoom.value && activeBoss.value === b.id;
 
 function randomRoom() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -40,26 +46,33 @@ function randomRoom() {
   for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
   return s;
 }
-function joinRoom() {
-  const code = roomInput.value.trim().toUpperCase();
+function joinRoom(bossId) {
+  const code = roomInputs[bossId].trim().toUpperCase();
   if (code && !/^[A-Z0-9]{4,6}$/.test(code)) {
     roomErr.value = t("roomErr");
+    errBoss.value = bossId;
     return;
   }
   roomErr.value = "";
+  errBoss.value = "";
+  if (inRoom.value) leaveRoom(); // 切 boss = 离开旧房 (单房间模型)
   awaitRoomState = true; // 等首个 room_state_sync 判定是否空房间 (应用记忆偏移)
   const room = code || randomRoom();
-  roomInput.value = room;
+  roomInputs[bossId] = room;
+  localStorage.setItem(`room_${bossId}`, room);
   localStorage.setItem("room", room);
+  localStorage.setItem("activeBoss", bossId);
+  activeBoss.value = bossId;
+  reloadAppearance(); // 切 boss 后外观设置读对应分 key
   unlockAudio();
   sync.join(room);
   inRoom.value = true;
-  // 创建悬浮窗 (主窗口保持显示)
-  invoke("open_overlay");
+  // 创建悬浮窗 (主窗口保持显示); boss 参数决定面板位置存储分 key
+  invoke("open_overlay", { boss: bossId });
 }
-function quickCreate() {
-  roomInput.value = "";
-  joinRoom();
+function quickCreate(bossId) {
+  roomInputs[bossId] = "";
+  joinRoom(bossId);
 }
 function leaveRoom() {
   sync.leave();
@@ -69,12 +82,38 @@ function leaveRoom() {
   emit("room-left");
 }
 function retryJoin() {
-  const room = sync.room || roomInput.value.trim().toUpperCase();
+  const room = sync.room || roomInputs[activeBoss.value]?.trim().toUpperCase();
   if (!room) return;
-  roomInput.value = room;
+  roomInputs[activeBoss.value] = room;
   awaitRoomState = true;
   unlockAudio();
   sync.join(room);
+}
+
+// ---- PB 名字 (纯本地: localStorage 持久化, 服务器不同步 — 见交接文档 3.3 实测结论) ----
+const NAME_KEYS = ["ress1", "ress2", "ress3", "ress4", "ress5", "tl1", "tl2", "tl3"];
+const pbNames = reactive({});
+const namesMsg = ref(null);
+let namesMsgTimer = null;
+function loadPbNames() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem("pbNames") || "{}");
+  } catch {
+    /* 损坏则重置 */
+  }
+  for (const k of NAME_KEYS) pbNames[k] = typeof saved[k] === "string" ? saved[k] : "";
+}
+loadPbNames();
+function savePbNames() {
+  const out = {};
+  for (const k of NAME_KEYS) out[k] = pbNames[k].trim().slice(0, 10); // 名字 ≤10 字符
+  localStorage.setItem("pbNames", JSON.stringify(out));
+  loadPbNames(); // 归一化显示
+  emit("settings-changed"); // 悬浮窗刷新名字
+  namesMsg.value = t("namesSaved");
+  clearTimeout(namesMsgTimer);
+  namesMsgTimer = setTimeout(() => (namesMsg.value = null), 2000);
 }
 
 // ---- 偏移 (全房同步, 计时上限 = CD - offset, 下限 5s; lastOffset 本地记忆) ----
@@ -165,20 +204,26 @@ function backToGame() {
   invoke("focus_game");
 }
 
-// ---- 设置 (localStorage; 悬浮窗监听 settings-changed 重读) ----
+// ---- 设置 (声音/语言/offset 全局; 透明度/缩放按 boss 分 key — 悬浮窗设置独立) ----
+// lsGet: 优先 {key}_{boss}, 回退旧全局 {key} (v1.1.x 迁移)
+function lsGet(key, fallback) {
+  return localStorage.getItem(`${key}_${activeBoss.value}`) ?? localStorage.getItem(key) ?? fallback;
+}
 const soundMode = ref(localStorage.getItem("soundMode") || "beep");
 const SOUND_OPTIONS = [
   { value: "voice", label: () => t("voice") },
   { value: "beep", label: () => t("beep") },
   { value: "mute", label: () => t("mute") },
 ];
-const panelOpacity = ref(parseFloat(localStorage.getItem("panelOpacity") || "0.85"));
-const uiScale = ref(parseFloat(localStorage.getItem("uiScale") || "1"));
+const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
+const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
+// 外观设置仅作用于当前 boss (卡片切换后滑块跟随)
+const appearanceBossLabel = computed(() => BOSSES[activeBoss.value]?.label || "AUF");
 
 function persistSettings() {
   localStorage.setItem("soundMode", soundMode.value);
-  localStorage.setItem("panelOpacity", panelOpacity.value);
-  localStorage.setItem("uiScale", uiScale.value);
+  localStorage.setItem(`panelOpacity_${activeBoss.value}`, String(panelOpacity.value));
+  localStorage.setItem(`uiScale_${activeBoss.value}`, String(uiScale.value));
   emit("settings-changed");
 }
 function setSoundMode(m) {
@@ -188,6 +233,11 @@ function setSoundMode(m) {
 }
 function applyAppearance() {
   persistSettings();
+}
+// 切 boss 后重读外观值 (滑块显示对应 boss 的设置)
+function reloadAppearance() {
+  panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
+  uiScale.value = parseFloat(lsGet("uiScale", "1"));
 }
 // 语言切换: 写 localStorage + 通知悬浮窗
 function setLocale(l) {
@@ -337,22 +387,33 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- 计时器列表 (未来扩展: HT 等副本卡片) -->
+      <!-- 计时器卡片 (单房间: 活跃卡片显示房间控制, 其余卡片可直接加入 = 切换 boss) -->
       <div class="section">
         <div class="secTitle">{{ t("timersSection") }}</div>
-        <div class="timercard" :class="{ active: inRoom }">
+        <div
+          v-for="b in bossList"
+          :key="b.id"
+          class="timercard"
+          :class="{ active: activeCard(b) }"
+        >
           <div class="tcHead">
-            <span class="tcName">AUF</span>
-            <span v-if="inRoom" class="pill" :class="statusCls">{{ statusText }}</span>
-            <span v-else class="pill off">未启用</span>
+            <span class="tcName">{{ b.label }}</span>
+            <span v-if="activeCard(b)" class="pill" :class="statusCls">{{ statusText }}</span>
+            <span v-else class="pill off">{{ t("notEnabled") }}</span>
           </div>
-          <template v-if="!inRoom">
-            <button class="btn big" @click="quickCreate">{{ t("quickCreate") }}</button>
+          <template v-if="!activeCard(b)">
+            <button class="btn big" @click="quickCreate(b.id)">{{ t("quickCreate") }}</button>
             <div class="joinrow">
-              <input v-model="roomInput" :placeholder="t('roomCodePh')" maxlength="6" class="inp" @keyup.enter="joinRoom" />
-              <button class="btn" @click="joinRoom">{{ t("join") }}</button>
+              <input
+                v-model="roomInputs[b.id]"
+                :placeholder="t('roomCodePh')"
+                maxlength="6"
+                class="inp"
+                @keyup.enter="joinRoom(b.id)"
+              />
+              <button class="btn" @click="joinRoom(b.id)">{{ t("join") }}</button>
             </div>
-            <p v-if="roomErr" class="err">{{ roomErr }}</p>
+            <p v-if="roomErr && errBoss === b.id" class="err">{{ roomErr }}</p>
           </template>
           <template v-else>
             <div class="roomline">
@@ -365,6 +426,21 @@ onMounted(async () => {
               <button class="btn danger" @click="leaveRoom">{{ t("leaveRoom") }}</button>
             </div>
             <p class="muted">{{ t("lobbyHint") }}</p>
+            <!-- PB 名字编辑 (纯本地) -->
+            <div v-if="b.id === 'pb'" class="namesedit">
+              <div class="namesTitle">{{ t("pbNamesTitle") }}</div>
+              <div class="namesgrid">
+                <label v-for="k in NAME_KEYS" :key="k" class="nameslot">
+                  <span class="slotph">{{ k.startsWith("ress") ? "R" + k.slice(4) : "TL" + k.slice(2) }}</span>
+                  <input v-model="pbNames[k]" maxlength="10" class="inp namesinp" :placeholder="t('namesPh')" />
+                </label>
+              </div>
+              <div class="namesrow">
+                <span v-if="namesMsg" class="muted">{{ namesMsg }}</span>
+                <span class="flex1"></span>
+                <button class="btn sm" @click="savePbNames">{{ t("namesSave") }}</button>
+              </div>
+            </div>
           </template>
         </div>
       </div>
@@ -388,14 +464,20 @@ onMounted(async () => {
             </div>
           </div>
           <div class="setrow">
-            <span class="setlabel">{{ t("opacity") }}</span>
+            <span class="setlabel">
+              {{ t("opacity") }}
+              <span class="bossTag">{{ appearanceBossLabel }}</span>
+            </span>
             <div class="sliderbox">
               <input v-model.number="panelOpacity" type="range" min="0.5" max="1" step="0.01" @input="applyAppearance" />
               <span class="sliderval">{{ Math.round(panelOpacity * 100) }}%</span>
             </div>
           </div>
           <div class="setrow">
-            <span class="setlabel">{{ t("scale") }}</span>
+            <span class="setlabel">
+              {{ t("scale") }}
+              <span class="bossTag">{{ appearanceBossLabel }}</span>
+            </span>
             <div class="sliderbox">
               <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
               <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
@@ -608,6 +690,61 @@ input {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.65);
   white-space: nowrap;
+}
+
+/* ---- PB 名字编辑 ---- */
+.namesedit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.namesTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 1px;
+}
+.namesgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.nameslot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.slotph {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: Consolas, monospace;
+}
+.namesinp {
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.namesrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 外观设置的 boss 归属标签 */
+.bossTag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: 1px;
 }
 
 /* ---- 设置 ---- */

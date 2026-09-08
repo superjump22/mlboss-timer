@@ -7,12 +7,20 @@ import { SKILLS } from "./skills.js";
 import { BossSync } from "./sync.js";
 import { announceReady, announceReset, announceStart, preloadVoices, unlockAudio } from "./voice.js";
 import { locale, reloadLocale, t } from "./i18n.js";
+import { activeBossId } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
 const invoke = (cmd, args) =>
   isTauri ? window.__TAURI__.core.invoke(cmd, args).catch((e) => console.error(cmd, e)) : null;
 const emit = (event, payload) =>
   isTauri ? window.__TAURI__.event.emit(event, payload).catch(() => {}) : null;
+
+// 本悬浮窗对应的 boss (主窗口 join 前写入 localStorage; 外观/锁定/位置按 boss 分 key)
+const boss = activeBossId();
+// per-boss 读取: 优先 {key}_{boss}, 回退旧全局 {key} (v1.1.x 迁移)
+function lsGet(key, fallback) {
+  return localStorage.getItem(`${key}_${boss}`) ?? localStorage.getItem(key) ?? fallback;
+}
 
 // ---- 同步 (Rust WS 桥广播; 房间号从 localStorage 恢复) ----
 const sync = new BossSync();
@@ -43,10 +51,10 @@ const tickSent = {};
 const completedSent = new Set();
 const announced = new Set();
 
-// ---- 外观/声音 (localStorage; 主窗口设置时经 settings-changed 通知) ----
+// ---- 外观/声音 (声音全局; 透明度/缩放 per-boss; 主窗口设置时经 settings-changed 通知) ----
 const soundMode = ref(localStorage.getItem("soundMode") || "beep");
-const panelOpacity = ref(parseFloat(localStorage.getItem("panelOpacity") || "0.85"));
-const uiScale = ref(parseFloat(localStorage.getItem("uiScale") || "1"));
+const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
+const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
 // 游戏缩放系数 (Rust 下发 = 游戏客户区宽/1600); 面板总 zoom = uiScale × gameFactor × 0.8
 // (0.8 = 基准校准: 用户调定的标准 100% 大小)
 const BASE_SIZE_FACTOR = 0.8;
@@ -55,8 +63,8 @@ const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FA
 function reloadAppearance() {
   reloadLocale(); // 语言跟随主窗口设置
   soundMode.value = localStorage.getItem("soundMode") || "beep";
-  panelOpacity.value = parseFloat(localStorage.getItem("panelOpacity") || "0.85");
-  uiScale.value = parseFloat(localStorage.getItem("uiScale") || "1");
+  panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
+  uiScale.value = parseFloat(lsGet("uiScale", "1"));
   // 尺寸上报由 watch(uiScale) 统一触发, 不手动调用 (避免 DOM 未 flush 测量旧值)
 }
 
@@ -147,11 +155,11 @@ function pollReady() {
   }
 }
 
-// ---- 锁定 (首次默认解锁; 之后恢复上次状态, localStorage 持久化) ----
-const locked = ref(localStorage.getItem("overlayLocked") === "1");
+// ---- 锁定 (per-boss 持久化; 首次默认解锁; 之后恢复上次状态) ----
+const locked = ref(lsGet("overlayLocked", "0") === "1");
 function toggleLock() {
   locked.value = !locked.value;
-  localStorage.setItem("overlayLocked", locked.value ? "1" : "0");
+  localStorage.setItem(`overlayLocked_${boss}`, locked.value ? "1" : "0");
   focusGame();
 }
 
