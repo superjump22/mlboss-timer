@@ -652,7 +652,7 @@ input {
   align-items: center;
   gap: 8px;
   flex: 1;
-  max-width: 320px;
+  max-width: 380px;
   justify-content: flex-end;
 }
 .offsetinp {
@@ -668,15 +668,14 @@ input {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
 }
-/* 提示文字: 输入框左侧, flex:1 保证输入框/按钮位置不随消息出现跳动 */
+/* 提示文字: 输入框左侧; 允许两行内换行 (行高 ≤36px 不撑高 setrow, 无跳动) */
 .offsetmsg {
   flex: 1;
   min-width: 0;
   text-align: right;
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  overflow-wrap: break-word;
 }
 .offsetmsg.ok {
   color: #4ade80;
