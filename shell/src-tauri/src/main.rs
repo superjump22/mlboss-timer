@@ -27,7 +27,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const GAME_CLASS: &str = "MapleStoryClass"; // Phase 0 实测的窗口类名
 const TRACK_MS: u64 = 16; // 高频轮询保证跟随流畅 (~60fps)
 // 前端地址: 线上 EdgeOne Pages (发版即全员热更新); 本地开发时改回 http://localhost:5173
-const DEFAULT_URL: &str = "https://mlboss-timer-dpsnvkw52h0w.edgeone.dev/";
+const DEFAULT_URL: &str = "https://mlboss-timer-qyy7jqqd.edgeone.dev/";
 
 struct AppState {
     game_hwnd: Mutex<isize>,
