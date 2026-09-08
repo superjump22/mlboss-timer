@@ -426,6 +426,13 @@ onMounted(async () => {
         </button>
         <span class="flex1"></span>
         <button
+          class="muted plain link"
+          :title="RELEASES_URL"
+          @click="openGitHub"
+        >
+          {{ t("ghDownload") }}
+        </button>
+        <button
           class="btn ghost sm"
           :disabled="updateState === 'checking' || updateState === 'downloading'"
           @click="doCheckUpdate"
@@ -555,20 +562,14 @@ onMounted(async () => {
               </div>
             </div>
             <div class="setrow">
-              <span class="setlabel">
-                {{ t("opacity") }}
-                <span class="bossTag">{{ bossDef.label }}</span>
-              </span>
+              <span class="setlabel">{{ t("opacity") }}</span>
               <div class="sliderbox">
                 <input v-model.number="panelOpacity" type="range" min="0.5" max="1" step="0.01" @input="applyAppearance" />
                 <span class="sliderval">{{ Math.round(panelOpacity * 100) }}%</span>
               </div>
             </div>
             <div class="setrow">
-              <span class="setlabel">
-                {{ t("scale") }}
-                <span class="bossTag">{{ bossDef.label }}</span>
-              </span>
+              <span class="setlabel">{{ t("scale") }}</span>
               <div class="sliderbox">
                 <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
                 <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
@@ -680,7 +681,7 @@ input {
   padding-left: 2px;
 }
 
-/* ---- Boss 选择卡片 (仿 bossassis.com 首页) ---- */
+/* ---- Boss 选择卡片 (仿 bossassis.com 首页; 主题色渐变醒目) ---- */
 .bosscard {
   display: flex;
   flex-direction: column;
@@ -688,15 +689,16 @@ input {
   gap: 10px;
   padding: 20px 22px;
   border-radius: 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--boss-color, #4ade80) 10%, rgba(18, 21, 30, 0.92)), rgba(18, 21, 30, 0.92) 65%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--boss-color, #4ade80) 26%, rgba(18, 21, 30, 0.94)), rgba(18, 21, 30, 0.94) 70%);
+  border: 1px solid color-mix(in srgb, var(--boss-color, #4ade80) 30%, transparent);
   cursor: pointer;
   color: #eef0f4;
   text-align: left;
-  transition: background 0.15s, transform 0.15s, border-color 0.15s;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .bosscard:hover {
-  border-color: color-mix(in srgb, var(--boss-color, #4ade80) 45%, transparent);
+  border-color: color-mix(in srgb, var(--boss-color, #4ade80) 65%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--boss-color, #4ade80) 22%, transparent);
   transform: translateY(-2px);
 }
 .bcRow {
@@ -709,16 +711,17 @@ input {
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 2px;
-  color: var(--boss-color, #eef0f4);
+  color: color-mix(in srgb, var(--boss-color, #4ade80) 70%, white);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--boss-color, #4ade80) 55%, transparent);
 }
 .bcFull {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.55);
   letter-spacing: 1px;
 }
 .bcCount {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.45);
 }
 .bcGroups {
   display: flex;
@@ -728,9 +731,9 @@ input {
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--boss-color, #4ade80) 14%, rgba(255, 255, 255, 0.06));
+  color: rgba(255, 255, 255, 0.78);
+  border: 1px solid color-mix(in srgb, var(--boss-color, #4ade80) 25%, transparent);
 }
 
 /* ---- Boss 视图头部 ---- */
@@ -775,6 +778,7 @@ input {
   font-weight: 700;
   letter-spacing: 3px;
   color: var(--boss-color, #4ade80);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--boss-color, #4ade80) 45%, transparent);
   cursor: pointer;
   padding: 2px 10px;
   border-radius: 8px;
@@ -1010,8 +1014,9 @@ input {
   color: #fff;
 }
 .segbtn.active {
-  background: var(--boss-color, #2d6a4f);
+  background: var(--boss-btn, #2d6a4f);
   color: #fff;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--boss-color, #4ade80) 45%, transparent);
 }
 .sliderbox {
   display: flex;
@@ -1145,16 +1150,5 @@ input {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-/* 外观设置的 boss 归属标签 */
-.bossTag {
-  font-size: 10px;
-  font-weight: 700;
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 4px;
-  vertical-align: 1px;
 }
 </style>

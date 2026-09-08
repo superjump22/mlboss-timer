@@ -9,37 +9,6 @@
 // 语音措辞与 scripts/gen_voices.py 短语表保持一致
 
 export const BOSSES = {
-  auf: {
-    id: "auf",
-    label: "AUF",
-    full: "Aufheben",
-    color: "#4ade80",
-    btn: "#2d6a4f", // 原版按钮绿
-    timeFmt: "sec", // 原版网页: 纯秒数
-    groups: [
-      {
-        id: "main",
-        label: "主体",
-        labelEn: "Main",
-        skills: [
-          { id: "mdr", pid: "mainDR", label: "反伤·主", labelEn: "MDR", cd: 60, warn: 5, color: "#b95cff", voice: "主体反伤好了", voiceEn: "Main DR ready" },
-          { id: "mdp", pid: "mainDP", label: "DP·主", labelEn: "MDP", cd: 90, warn: 5, color: "#ff4d4d", voice: "主体DP好了", voiceEn: "Main DP ready" },
-          { id: "sed", pid: "sed", label: "诱惑", labelEn: "SED", cd: 30, warn: 5, color: "#ffa930", voice: "诱惑好了", voiceEn: "Seduce ready" },
-          { id: "stun", pid: "stun", label: "眩晕", labelEn: "STUN", cd: 60, warn: 5, color: "#4dd2ff", voice: "眩晕好了", voiceEn: "Stun ready" },
-        ],
-      },
-      {
-        id: "clone",
-        label: "分身",
-        labelEn: "Clone",
-        skills: [
-          { id: "cdr", pid: "cloneDR", label: "反伤·分", labelEn: "CDR", cd: 60, warn: 5, color: "#c9a0ff", voice: "分身反伤好了", voiceEn: "Clone DR ready" },
-          { id: "cdp", pid: "cloneDP", label: "DP·分", labelEn: "CDP", cd: 60, warn: 5, color: "#ff8fa3", voice: "分身DP好了", voiceEn: "Clone DP ready" },
-        ],
-      },
-    ],
-  },
-
   pb: {
     id: "pb",
     label: "PB",
@@ -87,8 +56,39 @@ export const BOSSES = {
     ],
   },
 
-  // HT 仿原版三行: 第一行左手 SED+MESS, 第二行右手 SED+MESS, 第三行各部位 DP
+  // HT 仿原版三行: 第一行左手 SED+MESS, 第二行右手 SED+MESS, 第三行 DP (跨部位)
   // 部位 tint (格子背景): 左暖 / 右冷; 类型色 (技能名): SED 橙 / MESS 蓝 / DP 红
+  auf: {
+    id: "auf",
+    label: "AUF",
+    full: "Aufheben",
+    color: "#4ade80",
+    btn: "#2d6a4f", // 原版按钮绿
+    timeFmt: "sec", // 原版网页: 纯秒数
+    groups: [
+      {
+        id: "main",
+        label: "主体",
+        labelEn: "Main",
+        skills: [
+          { id: "mdr", pid: "mainDR", label: "反伤·主", labelEn: "MDR", cd: 60, warn: 5, color: "#b95cff", voice: "主体反伤好了", voiceEn: "Main DR ready" },
+          { id: "mdp", pid: "mainDP", label: "DP·主", labelEn: "MDP", cd: 90, warn: 5, color: "#ff4d4d", voice: "主体DP好了", voiceEn: "Main DP ready" },
+          { id: "sed", pid: "sed", label: "诱惑", labelEn: "SED", cd: 30, warn: 5, color: "#ffa930", voice: "诱惑好了", voiceEn: "Seduce ready" },
+          { id: "stun", pid: "stun", label: "眩晕", labelEn: "STUN", cd: 60, warn: 5, color: "#4dd2ff", voice: "眩晕好了", voiceEn: "Stun ready" },
+        ],
+      },
+      {
+        id: "clone",
+        label: "分身",
+        labelEn: "Clone",
+        skills: [
+          { id: "cdr", pid: "cloneDR", label: "反伤·分", labelEn: "CDR", cd: 60, warn: 5, color: "#c9a0ff", voice: "分身反伤好了", voiceEn: "Clone DR ready" },
+          { id: "cdp", pid: "cloneDP", label: "DP·分", labelEn: "CDP", cd: 60, warn: 5, color: "#ff8fa3", voice: "分身DP好了", voiceEn: "Clone DP ready" },
+        ],
+      },
+    ],
+  },
+
   ht: {
     id: "ht",
     label: "HT",
@@ -124,7 +124,7 @@ export const BOSSES = {
       },
       {
         id: "dp",
-        label: "消buff",
+        label: "DP",
         labelEn: "DP",
         skills: [
           { id: "laDp1", pid: "laDp1", label: "左手DP1", labelEn: "LA DP#1", cd: 300, warn: 5, color: "#ff4d4d", voice: "左手DP1好了", voiceEn: "LA DP 1 ready" },
