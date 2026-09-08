@@ -115,9 +115,8 @@ sync.onOffsetChange = (n, source) => {
   }
   offsetInput.value = n;
   localStorage.setItem("lastOffset", String(n)); // 历史记忆 (本地改/房间同步均更新)
-  if (source === "remote") showOffsetMsg("offsetSynced", n, true);
+  if (source === "remote" || source === "joined" && n > 0) showOffsetMsg("offsetSynced", n, true); // 队友改动/加入已有偏移房间 → 统一提示
   else if (source === "local") showOffsetMsg("offsetApplied", n, true);
-  else if (source === "joined" && n > 0) showOffsetMsg("offsetRoomJoined", n, true); // 加入已有偏移的房间
 };
 function applyOffset() {
   const v = Math.round(Number(offsetInput.value));
