@@ -1,6 +1,7 @@
 // bossassis 协议实测脚本 (node >= 18)
 // 验证: join/房间状态/timer_action 广播/tick/complete/心跳 ack 格式/leave 断连
 // + offset 协议实测 (Phase A-1): 回显/广播格式/服务器存储/join offset 字段语义
+// + PB 名字协议实测 (Phase 3): player_names 广播/回显/持久化, room_names_request/response, join 带 playerNames
 // 网络: 默认经本地代理 HTTP CONNECT 隧道 (直连被墙); WS_PROXY=direct 强制直连, WS_PROXY=host:port 自定义
 // 用法: node scripts/test_protocol.mjs
 import net from "node:net";
@@ -158,13 +159,15 @@ function send(cli, obj) {
   return true;
 }
 
-function connect(name, joinOffset = 0) {
+function connect(name, joinOffset = 0, roomCode = ROOM, extraJoin = null) {
   const ws = new MiniWS();
   const cli = { name, ws, msgs: [], open: false };
   ws.onopen = () => {
     cli.open = true;
     log(`[${name}] open`);
-    ws.send(JSON.stringify({ type: "join_room", roomCode: ROOM, clientType: "timer", offset: joinOffset }));
+    const join = { type: "join_room", roomCode, clientType: "timer", offset: joinOffset };
+    if (extraJoin) Object.assign(join, extraJoin);
+    ws.send(JSON.stringify(join));
   };
   ws.onmessage = (e) => {
     let m;
@@ -293,5 +296,65 @@ for (const [name, cli] of [["A", A], ["B", B], ["C", C], ["D", D]]) {
   log(
     `[${name}] room_joined.roomOffset=${rj?.roomOffset ?? "(缺)"}; 最后 room_state_sync: offset=${rss?.offset ?? "(缺)"}, timers=${rss ? JSON.stringify(rss.timers) : "(无)"}`
   );
+}
+
+// ---- PB 名字协议实测 (Phase 3, 见交接文档 3.3 节; 独立房间避免污染) ----
+const PROOM = "PB" + Math.random().toString(36).slice(2, 5).toUpperCase();
+log(`== PB 名字协议实测开始 (房间 ${PROOM}) ==`);
+
+// P-1: E 加入 (join 带 playerNames 全量对象) → 服务器是否接受? 广播给谁?
+const E = connect("E", 0, PROOM, { playerNames: { ress1: "小美", tl1: "Bob" } });
+if (!(await waitOpen(E))) log("!! E 连接失败/超时");
+await sleep(800);
+
+// P-2: F 加入 (也带 playerNames) → E 收到什么? F 的 join 名字是否覆盖 E 的?
+const F = connect("F", 0, PROOM, { playerNames: { ress2: "Alice" } });
+if (!(await waitOpen(F))) log("!! F 连接失败/超时");
+await sleep(800);
+
+// P-3: E 改名广播 player_names (只发变更项) → E 自己收到回显? F 收到广播? 格式?
+send(E, { type: "player_names", roomCode: PROOM, names: { ress1: "小明" } });
+await sleep(1000);
+
+// P-4: F 发 room_names_request → 谁回应? room_names_response 格式? 全量还是增量?
+send(F, { type: "room_names_request", roomCode: PROOM });
+await sleep(1500);
+
+// P-5: G 新加入 (不带 playerNames) → 收到名字推送? room_state_sync 里带名字?
+const G = connect("G", 0, PROOM);
+if (!(await waitOpen(G))) log("!! G 连接失败/超时");
+await sleep(800);
+// G 主动问一次
+send(G, { type: "room_names_request", roomCode: PROOM });
+await sleep(1500);
+
+// P-6: E 离开重进 → 名字是否还在 (服务器持久化)?
+send(E, { type: "leave_room", roomCode: PROOM });
+await sleep(1500);
+const E2 = connect("E2", 0, PROOM);
+if (!(await waitOpen(E2))) log("!! E2 连接失败/超时");
+await sleep(800);
+send(E2, { type: "room_names_request", roomCode: PROOM });
+await sleep(1500);
+
+// 清理
+send(F, { type: "leave_room", roomCode: PROOM });
+send(G, { type: "leave_room", roomCode: PROOM });
+send(E2, { type: "leave_room", roomCode: PROOM });
+await sleep(1500);
+log("== PB 名字协议实测结束 ==");
+
+// ---- PB 名字协议汇总 ----
+log("== PB names 汇总 ==");
+const types = (cli) => [...new Set(cli.msgs.map((m) => m.type))].join(", ");
+for (const [name, cli] of [["E", E], ["F", F], ["G", G], ["E2", E2]]) {
+  log(`[${name}] 收到消息类型: ${types(cli)}`);
+  const pn = cli.msgs.filter((m) => m.type === "player_names");
+  if (pn.length) log(`[${name}] player_names: ${pn.map((m) => JSON.stringify(m)).join(" | ")}`);
+  const rn = cli.msgs.filter((m) => m.type === "room_names_response");
+  if (rn.length) log(`[${name}] room_names_response: ${rn.map((m) => JSON.stringify(m)).join(" | ")}`);
+  const rj = cli.msgs.find((m) => m.type === "room_joined");
+  if (rj && rj.playerNames !== undefined)
+    log(`[${name}] room_joined 带 playerNames: ${JSON.stringify(rj.playerNames)}`);
 }
 process.exit(0);
