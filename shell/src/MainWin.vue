@@ -810,7 +810,7 @@ input {
   font-weight: 600;
 }
 .updatepill:hover {
-  background: rgba(74, 222, 128, 0.28);
+  background: color-mix(in srgb, var(--boss-color, #4ade80) 28%, transparent);
 }
 .plain {
   background: none;
@@ -843,7 +843,7 @@ input {
 }
 .progfill {
   height: 100%;
-  background: #4ade80;
+  background: var(--boss-color, #4ade80);
   border-radius: 4px;
   transition: width 0.15s;
 }
@@ -875,7 +875,7 @@ input {
   outline: none;
 }
 .inp:focus {
-  border-color: rgba(74, 222, 128, 0.6);
+  border-color: color-mix(in srgb, var(--boss-color, #4ade80) 60%, transparent);
 }
 .btn {
   background: var(--boss-btn, #2d6a4f); /* Boss 视图内随主题色, 其余场景默认绿 */
@@ -911,8 +911,9 @@ input {
   background: rgba(255, 255, 255, 0.08);
 }
 .pill.ok {
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
+  background: color-mix(in srgb, var(--boss-color, #4ade80) 15%, transparent);
+  color: color-mix(in srgb, var(--boss-color, #4ade80) 80%, white);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--boss-color, #4ade80) 40%, transparent);
 }
 .pill.warn {
   background: rgba(255, 209, 102, 0.15);
@@ -1068,7 +1069,8 @@ input {
   overflow-wrap: break-word;
 }
 .offsetmsg.ok {
-  color: #4ade80;
+  color: color-mix(in srgb, var(--boss-color, #4ade80) 80%, white);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--boss-color, #4ade80) 40%, transparent);
 }
 .offsetmsg.err {
   color: #ff7b7b;
