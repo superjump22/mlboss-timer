@@ -21,5 +21,16 @@ Thumbs.db
 *.log
 _archive/
 
+# 凭证 (COS 密钥等, 绝不入库)
+cos_credentials.txt
+miyao.txt
+*.key
+
 # 发布暂存 (安装包/manifest 不入库, 经 EdgeOne 控制台上传)
 release/
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+  

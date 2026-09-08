@@ -371,9 +371,11 @@ async fn show_main(app: tauri::AppHandle) {
     show_main_win(&app);
 }
 
-// ---- 更新 (客户端内下载安装; 腾讯云 COS + EdgeOne 加速托管 manifest + 安装包) ----
+// ---- 更新 (客户端内下载安装; 腾讯云 COS 存储 + EdgeOne CDN 加速, 桶不对公网开放) ----
+// manifest 与安装包都走 CDN (cos.xivstrat.cn); manifest 新鲜度依赖查询串缓存键:
+// check_update 每次带 ?t=<毫秒> 唯一参数 → EdgeOne 缓存键含查询串则每次回源 (部署时实测验证)
 
-/// 更新清单 (COS 存储桶 mlbosstimer/ 前缀, EdgeOne 加速域名国内直连可达; ?t= 时间戳破 CDN 缓存)
+/// 更新清单 (EdgeOne CDN → COS 私有桶; 客户端始终带唯一 ?t= 参数请求)
 const MANIFEST_URL: &str = "https://cos.xivstrat.cn/mlbosstimer/manifest.json";
 
 #[derive(serde::Serialize)]
