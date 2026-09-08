@@ -128,7 +128,7 @@ const dict = {
     showSupport: "Support skills",
     on: "Show",
     off: "Hide",
-    pbGroupRes: "Res",
+    pbGroupRes: "Resurrection",
     pbGroupTl: "Time Leap",
     namesPh: "Name",
     namesSave: "Save names",
