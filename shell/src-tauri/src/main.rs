@@ -461,16 +461,19 @@ fn build_http_client(proxy: bool, timeout: Option<Duration>) -> Result<reqwest::
     builder.build().map_err(|e| e.to_string())
 }
 
-/// GET: 直连优先 (EdgeOne 国内直连通常可达), 失败走系统代理兜底
+/// GET: 系统代理优先 (dl 站点为海外节点, 国内直连常被限速; 浏览器走代理所以网页快),
+/// 无代理或代理不可用走直连兜底
 async fn http_get(url: &str, timeout: Option<Duration>) -> Result<reqwest::Response, String> {
-    if let Ok(client) = build_http_client(false, timeout) {
-        if let Ok(resp) = client.get(url).send().await {
-            if resp.status().is_success() {
-                return Ok(resp);
+    if sync_ws::proxy_addr().is_some() {
+        if let Ok(client) = build_http_client(true, timeout) {
+            if let Ok(resp) = client.get(url).send().await {
+                if resp.status().is_success() {
+                    return Ok(resp);
+                }
             }
         }
     }
-    let client = build_http_client(true, timeout)?;
+    let client = build_http_client(false, timeout)?;
     let resp = client
         .get(url)
         .send()
@@ -567,6 +570,7 @@ async fn download_update(app: tauri::AppHandle, url: String, sha256: String) -> 
 /// 运行安装器 (NSIS /S 静默) 并退出应用
 /// 时序: cmd 脚本先 ping 延时 ~1s 等本进程退出 (timeout.exe 在无控制台进程会立即报错, 故用 ping),
 /// 安装完成后 start 重启应用 (安装目录不变, current_exe 路径即新 exe 路径)
+/// ⚠️ 必须用 raw_arg 整行原样传给 cmd: std Command 的自动引号转义 (\"...) 会污染路径 → "找不到 \\" 报错
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, path: String) -> Result<(), String> {
     #[cfg(windows)]
@@ -578,7 +582,7 @@ async fn install_update(app: tauri::AppHandle, path: String) -> Result<(), Strin
             script.push_str(&format!(" & start \"\" \"{}\"", exe.display()));
         }
         std::process::Command::new("cmd")
-            .args(["/c", &script])
+            .raw_arg(format!("/c {script}"))
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| format!("启动安装器失败: {e}"))?;
