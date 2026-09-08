@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { skillLabel } from "../i18n.js";
+import { skillLabel, timeFmt } from "../i18n.js";
 
 const props = defineProps({
   skill: Object, // {id,label,labelEn,cd,warn,color,nameable?}
@@ -15,11 +15,13 @@ const label = computed(() => props.name || skillLabel(props.skill));
 // idle/ready 显示值: offset 生效时为 max(5, 原始CD - offset)
 const eff = computed(() => (props.effcd > 0 ? props.effcd : props.skill.cd));
 
-// cd ≥ 60 → m:ss (30:00 / 5:00 / 0:55); < 60 → 纯秒数 (AUF 既有格式, 零回归)
+// 时间显示: 全局偏好 "ms" = 分秒 (30:00/5:00/0:55), "sec" = 纯秒数 (300/55)
 function fmt(sec) {
   const s = Math.max(0, Math.round(sec));
-  if (eff.value < 60) return String(s);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (timeFmt.value !== "sec" && eff.value >= 60) {
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  return String(s);
 }
 
 const display = computed(() => {

@@ -27,6 +27,9 @@ const dict = {
     mute: "静音",
     opacity: "背景不透明度",
     scale: "界面缩放",
+    timeFmt: "时间格式",
+    timeFmtMs: "分秒 (5:00)",
+    timeFmtSec: "秒数 (300)",
     offsetLabel: "偏移",
     offsetTip: "所有技能计时上限减去该秒数（下限 5s），全房间同步；未进房时设置为下次建房/进空房的默认值",
     offsetApply: "应用",
@@ -91,6 +94,9 @@ const dict = {
     mute: "Mute",
     opacity: "Background opacity",
     scale: "UI scale",
+    timeFmt: "Time format",
+    timeFmtMs: "M:SS (5:00)",
+    timeFmtSec: "Seconds (300)",
     offsetLabel: "Offset",
     offsetTip: "Reduces every timer duration by this many seconds (min 5s), synced room-wide. Outside a room, it becomes the default for new rooms you create or join.",
     offsetApply: "Apply",
@@ -134,6 +140,9 @@ const dict = {
 
 export const locale = ref(localStorage.getItem("locale") || "zh");
 
+// 时间显示格式: "ms" = 分秒 (5:00) | "sec" = 纯秒数 (300); 全局偏好, settings-changed 时 reload
+export const timeFmt = ref(localStorage.getItem("timeFmt") || "ms");
+
 export function t(key) {
   return dict[locale.value]?.[key] ?? dict.zh[key] ?? key;
 }
@@ -148,6 +157,10 @@ export function reloadLocale() {
   const saved = localStorage.getItem("locale");
   if (saved && saved !== locale.value) {
     locale.value = saved;
+  }
+  const fmt = localStorage.getItem("timeFmt");
+  if (fmt && fmt !== timeFmt.value) {
+    timeFmt.value = fmt;
   }
 }
 

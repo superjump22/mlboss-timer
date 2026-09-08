@@ -5,7 +5,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { BossSync } from "./sync.js";
 import { preloadVoices, unlockAudio } from "./voice.js";
-import { locale, setLocale as baseSetLocale, t } from "./i18n.js";
+import { locale, setLocale as baseSetLocale, t, timeFmt as timeFmtRef } from "./i18n.js";
 import { BOSSES } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
@@ -245,6 +245,14 @@ function reloadAppearance() {
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
 }
+// 时间显示格式 (全局): "ms" = 分秒 | "sec" = 纯秒数; 悬浮窗 reloadLocale 时同步
+const timeFmtVal = timeFmtRef;
+function setTimeFmt(v) {
+  timeFmtVal.value = v;
+  localStorage.setItem("timeFmt", v);
+  emit("settings-changed");
+}
+
 // 语言切换: 写 localStorage + 通知悬浮窗
 function setLocale(l) {
   baseSetLocale(l);
@@ -254,6 +262,7 @@ function resetDefaults() {
   soundMode.value = "beep";
   panelOpacity.value = 0.85;
   uiScale.value = 1;
+  setTimeFmt("ms");
   setLocale("zh");
   persistSettings();
   unlockAudio();
@@ -541,6 +550,13 @@ onMounted(async () => {
                 />
                 <span class="offsetunit">s</span>
                 <button class="btn sm" @click="applyOffset">{{ t("offsetApply") }}</button>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">{{ t("timeFmt") }}</span>
+              <div class="seg">
+                <button class="segbtn" :class="{ active: timeFmtVal === 'ms' }" @click="setTimeFmt('ms')">{{ t("timeFmtMs") }}</button>
+                <button class="segbtn" :class="{ active: timeFmtVal === 'sec' }" @click="setTimeFmt('sec')">{{ t("timeFmtSec") }}</button>
               </div>
             </div>
             <div class="setrow">
