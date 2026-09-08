@@ -21,8 +21,10 @@ function lsGet(key, fallback) {
   return localStorage.getItem(`${key}_${boss}`) ?? localStorage.getItem(key) ?? fallback;
 }
 
-// ---- 技能集与分组布局 (AUF 单行 6 格零回归; PB/HT 12 格两行) ----
+// ---- 技能集与分组布局 (AUF 单行 6 格零回归; PB/HT 12 格多行) ----
 const SKILLS = skillsOf(boss);
+// 格子固定宽 (行内列对齐): PB 宽 (容纳队友名), HT 中 (左手SED1 全显), AUF 紧凑原样
+const CELL_W = { pb: "84px", ht: "68px", auf: "60px" }[boss] || "60px";
 // PB 支援技能开关 (R/TL 位; 默认显示, 主窗口设置经 settings-changed 通知)
 const showSupport = ref(lsGet("showSupport", "1") === "1");
 // 分组装箱: HT 每组独占一行 (仿原版三行); 其余每行技能数上限 8 (AUF 单行, PB 4 | 5+3)
@@ -353,7 +355,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="overlaywin" :style="{ '--panel-alpha': panelOpacity }">
     <!-- 计时面板: [锁] [分组×N (每行 ≤8 格, 组间分隔线)] [多开][✕] -->
-    <div class="panel" :style="{ zoom: panelZoom }" @mousedown="onPanelMouseDown">
+    <div class="panel" :style="{ zoom: panelZoom, '--cell-w': CELL_W }" @mousedown="onPanelMouseDown">
       <button
         class="lockbtn"
         :class="locked ? 'on' : 'off'"

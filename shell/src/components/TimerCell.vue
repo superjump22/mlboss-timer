@@ -70,6 +70,7 @@ function onClick() {
 <style scoped>
 /* 尺寸用 CSS 变量: 外层(悬浮窗紧凑模式)可覆盖 */
 .cell {
+  width: var(--cell-w, auto); /* 固定宽: 同 boss 行内格子列对齐 (悬浮窗注入) */
   min-width: var(--cell-min-w, 78px);
   padding: var(--cell-pad, 6px 8px 5px);
   border-radius: 10px;
@@ -78,6 +79,7 @@ function onClick() {
   user-select: none;
   text-align: center;
   transition: background 0.12s;
+  overflow: hidden;
 }
 .cell.pressed {
   background: rgba(255, 255, 255, 0.14);
@@ -91,6 +93,9 @@ function onClick() {
 .name {
   font: 700 var(--name-fs, 13px)/1.2 "Segoe UI", "Microsoft YaHei UI", sans-serif;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis; /* PB 长名字截断, 不撑破固定宽格子 */
 }
 .time {
   font: 700 var(--time-fs, 24px)/1.15 Consolas, "Cascadia Mono", monospace;
