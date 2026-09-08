@@ -35,6 +35,7 @@ const dict = {
     offsetSaved: "已保存 {n}s · 下次建房生效",
     offsetAuto: "已自动应用上次 {n}s",
     offsetSynced: "已同步队友 {n}s",
+    offsetRoomJoined: "已同步房间偏移 {n}s",
     offsetUnchanged: "偏移值未改变",
     language: "语言",
     resetDefaults: "恢复默认",
