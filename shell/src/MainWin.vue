@@ -81,14 +81,14 @@ function retryJoin() {
 // 语义: 加入"干净"房间 (room_state_sync 无计时器且 offset=0) → 自动应用记忆值,
 // 即"第一个动它的人为准"; 房间已有 offset/计时器 → 以房间为准
 const offsetInput = ref(parseInt(localStorage.getItem("lastOffset") || "0", 10) || 0);
-const offsetMsg = ref(null); // {text, ok} 短暂显示
+const offsetMsg = ref(null); // {key, n, ok} 渲染时翻译 → 语言切换实时刷新
 let offsetMsgTimer = null;
 let awaitRoomState = false; // join 后等首个 room_state_sync 判定空房间
 function lastOffset() {
   return parseInt(localStorage.getItem("lastOffset") || "0", 10) || 0;
 }
-function showOffsetMsg(text, ok) {
-  offsetMsg.value = { text, ok };
+function showOffsetMsg(key, n, ok) {
+  offsetMsg.value = { key, n, ok };
   clearTimeout(offsetMsgTimer);
   offsetMsgTimer = setTimeout(() => (offsetMsg.value = null), 2500);
 }
@@ -128,10 +128,10 @@ function applyOffset() {
   if (!sync.room) {
     // 未进房: 仅更新记忆值 (下次建房/进空房时生效)
     localStorage.setItem("lastOffset", String(v));
-    showOffsetMsg(t("offsetSaved").replace("{n}", v), true);
+    showOffsetMsg("offsetSaved", v, true);
     return;
   }
-  sync.setOffset(v) || showOffsetMsg(t("offsetUnchanged"), true); // 值未变时 setOffset 静默返回 false
+  sync.setOffset(v) || showOffsetMsg("offsetUnchanged", null, true); // 值未变时 setOffset 静默返回 false
 }
 
 // ---- 复制房间码 (已进房时) ----
@@ -344,7 +344,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="setrow">
-            <span class="setlabel">
+            <span class="setlabel offsetlabel">
               {{ t("offsetLabel") }}
               <span class="helpicon" tabindex="0">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -356,7 +356,11 @@ onMounted(async () => {
               </span>
             </span>
             <div class="offsetbox">
-              <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{ offsetMsg.text }}</span>
+              <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{
+                offsetMsg.n === null
+                  ? t(offsetMsg.key)
+                  : t(offsetMsg.key).replace("{n}", offsetMsg.n)
+              }}</span>
               <input
                 v-model="offsetInput"
                 type="number"
@@ -622,15 +626,19 @@ input {
 .setlabel {
   flex-shrink: 0;
 }
+/* 偏移标签: flex 对齐, 问号图标与文字中线水平 */
+.offsetlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
 /* 问号帮助图标: hover/聚焦显示说明气泡 */
 .helpicon {
   position: relative;
   display: inline-flex;
   align-items: center;
-  margin-left: 4px;
   color: rgba(255, 255, 255, 0.35);
   cursor: help;
-  vertical-align: middle;
 }
 .helpicon:hover,
 .helpicon:focus {
