@@ -20,7 +20,10 @@ const syncStatus = ref("idle");
 const starts = reactive({});
 let tickTimer = null;
 const nowRef = ref(0);
+// 房间偏移 (全房同步): 响应式副本, sync 回调驱动 (idle 显示/新计时用)
+const roomOffset = ref(sync.roomOffset || 0);
 sync.onStatus = (s) => (syncStatus.value = s);
+sync.onOffsetChange = (n) => (roomOffset.value = n);
 
 function syncNow() {
   return (nowRef.value || Date.now()) + sync.offset;
@@ -33,7 +36,7 @@ function stateOf(skill) {
   return { phase: "run", remain };
 }
 function effCd(s) {
-  return Math.max(5, s.cd - sync.roomOffset);
+  return Math.max(5, s.cd - roomOffset.value);
 }
 
 const tickSent = {};
@@ -107,7 +110,7 @@ function applyRemote(pid, action, data = {}) {
   const serverNow = sync.now();
   const lastUp = typeof data.last_update === "number" ? data.last_update : serverNow / 1000;
   const remain = (data.remaining ?? 0) - (serverNow / 1000 - lastUp);
-  const cd = data.duration || s.cd;
+  const cd = data.duration || effCd(s); // 服务器存的是 start 时已应用 offset 的时长
   starts[s.id] = { startTs: serverNow - (cd - remain) * 1000, cd };
   tickSent[s.id] = Math.ceil(Math.max(remain, 0) / 5) * 5;
   if (remain > 0) {
@@ -282,6 +285,8 @@ onMounted(async () => {
       // 拉取值与当前相同时 watch 不触发, 强制上报一次 (双 rAF 保证测量时序)
       reportBaseSize();
       pushRegionsNow();
+      // 主动拉取房间状态 (offset + 运行中计时器): 悬浮窗创建期会错过 join 后的全量同步
+      if (sync.room) sync.fetchRoomState();
     } catch (err) {
       console.error(err);
     }
@@ -320,6 +325,7 @@ onBeforeUnmount(() => {
           :key="SKILLS[i - 1].id"
           :skill="SKILLS[i - 1]"
           :state="stateOf(SKILLS[i - 1])"
+          :effcd="effCd(SKILLS[i - 1])"
           @start="start(i - 1)"
           @reset="reset(i - 1)"
         />
@@ -331,6 +337,7 @@ onBeforeUnmount(() => {
           :key="SKILLS[i + 3].id"
           :skill="SKILLS[i + 3]"
           :state="stateOf(SKILLS[i + 3])"
+          :effcd="effCd(SKILLS[i + 3])"
           @start="start(i + 3)"
           @reset="reset(i + 3)"
         />

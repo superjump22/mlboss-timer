@@ -5,15 +5,18 @@ import { skillLabel } from "../i18n.js";
 const props = defineProps({
   skill: Object, // {id,label,labelEn,cd,warn,color}
   state: Object, // {phase:'idle'|'run'|'ready', remain}
+  effcd: { type: Number, default: 0 }, // 含 offset 的有效 CD (未传/0 时用 skill.cd)
 });
 const emit = defineEmits(["start", "reset"]);
 
 const label = computed(() => skillLabel(props.skill));
+// idle/ready 显示值: offset 生效时为 max(5, 原始CD - offset)
+const eff = computed(() => (props.effcd > 0 ? props.effcd : props.skill.cd));
 
 const display = computed(() => {
   const s = props.state;
-  if (!s || s.phase === "idle") return { text: String(props.skill.cd), cls: "idle" };
-  if (s.phase === "ready") return { text: String(props.skill.cd), cls: "ready" };
+  if (!s || s.phase === "idle") return { text: String(eff.value), cls: "idle" };
+  if (s.phase === "ready") return { text: String(eff.value), cls: "ready" };
   const r = Math.ceil(s.remain);
   if (s.remain <= props.skill.warn) return { text: String(r), cls: "warn" };
   return { text: String(r), cls: "run" };

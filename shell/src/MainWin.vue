@@ -47,6 +47,7 @@ function joinRoom() {
     return;
   }
   roomErr.value = "";
+  awaitRoomState = true; // 等首个 room_state_sync 判定是否空房间 (应用记忆偏移)
   const room = code || randomRoom();
   roomInput.value = room;
   localStorage.setItem("room", room);
@@ -71,8 +72,66 @@ function retryJoin() {
   const room = sync.room || roomInput.value.trim().toUpperCase();
   if (!room) return;
   roomInput.value = room;
+  awaitRoomState = true;
   unlockAudio();
   sync.join(room);
+}
+
+// ---- 偏移 (全房同步, 计时上限 = CD - offset, 下限 5s; lastOffset 本地记忆) ----
+// 语义: 加入"干净"房间 (room_state_sync 无计时器且 offset=0) → 自动应用记忆值,
+// 即"第一个动它的人为准"; 房间已有 offset/计时器 → 以房间为准
+const offsetInput = ref(parseInt(localStorage.getItem("lastOffset") || "0", 10) || 0);
+const offsetMsg = ref(null); // {text, ok} 短暂显示
+let offsetMsgTimer = null;
+let awaitRoomState = false; // join 后等首个 room_state_sync 判定空房间
+function lastOffset() {
+  return parseInt(localStorage.getItem("lastOffset") || "0", 10) || 0;
+}
+function showOffsetMsg(text, ok) {
+  offsetMsg.value = { text, ok };
+  clearTimeout(offsetMsgTimer);
+  offsetMsgTimer = setTimeout(() => (offsetMsg.value = null), 2500);
+}
+sync.onJoined = () => {
+  inRoom.value = true;
+  offsetInput.value = sync.roomOffset; // 先同步房间实际值 (含 0)
+};
+sync.onRoomState = (timers) => {
+  if (!awaitRoomState) return;
+  awaitRoomState = false;
+  // 空房间判定: 无任何计时器记录且 offset 未被设置过
+  if (Object.keys(timers).length === 0 && sync.roomOffset === 0) {
+    const last = lastOffset();
+    if (last > 0) {
+      sync.setOffset(last); // onOffsetChange 会刷新输入框+记忆
+      showOffsetMsg(t("offsetAuto").replace("{n}", last), true);
+    }
+  }
+};
+sync.onOffsetChange = (n, source) => {
+  if (source === "left") {
+    offsetInput.value = lastOffset(); // 离房: 协议层已归 0, UI 显示记忆值
+    return;
+  }
+  offsetInput.value = n;
+  localStorage.setItem("lastOffset", String(n)); // 历史记忆 (本地改/房间同步均更新)
+  if (source === "remote") showOffsetMsg(t("offsetSynced").replace("{n}", n), true);
+  else if (source === "local") showOffsetMsg(t("offsetApplied").replace("{n}", n), true);
+};
+function applyOffset() {
+  const v = Math.round(Number(offsetInput.value));
+  if (offsetInput.value === "" || !Number.isInteger(v) || v < 0 || v > 30) {
+    showOffsetMsg(t("offsetErr"), false);
+    return;
+  }
+  offsetInput.value = v;
+  if (!sync.room) {
+    // 未进房: 仅更新记忆值 (下次建房/进空房时生效)
+    localStorage.setItem("lastOffset", String(v));
+    showOffsetMsg(t("offsetSaved").replace("{n}", v), true);
+    return;
+  }
+  sync.setOffset(v) || showOffsetMsg(t("offsetUnchanged"), true); // 值未变时 setOffset 静默返回 false
 }
 
 // ---- 复制房间码 (已进房时) ----
@@ -185,6 +244,7 @@ onMounted(async () => {
       await listen("room-left", () => {
         inRoom.value = false;
         syncStatus.value = "idle";
+        offsetInput.value = lastOffset(); // 显示记忆值
       });
     } catch (err) {
       console.error(err);
@@ -281,6 +341,23 @@ onMounted(async () => {
             <div class="sliderbox">
               <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
               <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
+            </div>
+          </div>
+          <div class="setrow">
+            <span class="setlabel" :title="t('offsetTip')">{{ t("offsetLabel") }}</span>
+            <div class="offsetbox">
+              <span v-if="offsetMsg" class="offsetmsg" :class="offsetMsg.ok ? 'ok' : 'err'">{{ offsetMsg.text }}</span>
+              <input
+                v-model="offsetInput"
+                type="number"
+                min="0"
+                max="30"
+                step="1"
+                class="inp offsetinp"
+                @keyup.enter="applyOffset"
+              />
+              <span class="offsetunit">s</span>
+              <button class="btn sm" @click="applyOffset">{{ t("offsetApply") }}</button>
             </div>
           </div>
           <div class="setrow">
@@ -568,6 +645,44 @@ input {
   color: rgba(255, 255, 255, 0.7);
   min-width: 38px;
   text-align: right;
+}
+/* ---- 偏移行 ---- */
+.offsetbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 320px;
+  justify-content: flex-end;
+}
+.offsetinp {
+  width: 64px;
+  text-align: center;
+  font-family: Consolas, monospace;
+}
+/* spin 按钮常驻显示 (Chromium 默认 hover 才出现) */
+.offsetinp::-webkit-inner-spin-button {
+  opacity: 1;
+}
+.offsetunit {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+/* 提示文字: 输入框左侧, flex:1 保证输入框/按钮位置不随消息出现跳动 */
+.offsetmsg {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.offsetmsg.ok {
+  color: #4ade80;
+}
+.offsetmsg.err {
+  color: #ff7b7b;
 }
 .dialogrow {
   display: flex;

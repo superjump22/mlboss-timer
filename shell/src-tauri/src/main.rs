@@ -356,10 +356,17 @@ struct UpdateInfo {
     has_update: bool,
 }
 
+/// 剥掉 v 前缀与 prerelease 后缀, 只留 "X.Y.Z" 核心
+fn version_core(s: &str) -> &str {
+    s.trim_start_matches('v').split('-').next().unwrap_or("")
+}
+
 /// 语义化版本比较: a > b ?
+/// prerelease 后缀 (-beta.N 等) 剥掉不参与比较: 正式通道只看正式版,
+/// beta 用户不会被提示升级到同版本号的正式版 (beta 检测暂不做, 见交接文档 2.5 节)
 fn version_gt(a: &str, b: &str) -> bool {
-    let pa: Vec<u64> = a.trim_start_matches('v').split('.').filter_map(|s| s.parse().ok()).collect();
-    let pb: Vec<u64> = b.trim_start_matches('v').split('.').filter_map(|s| s.parse().ok()).collect();
+    let pa: Vec<u64> = version_core(a).split('.').filter_map(|s| s.parse().ok()).collect();
+    let pb: Vec<u64> = version_core(b).split('.').filter_map(|s| s.parse().ok()).collect();
     for i in 0..3 {
         let x = pa.get(i).copied().unwrap_or(0);
         let y = pb.get(i).copied().unwrap_or(0);

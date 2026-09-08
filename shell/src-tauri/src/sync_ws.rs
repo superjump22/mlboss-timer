@@ -180,11 +180,13 @@ fn emit_status(app: &AppHandle, status: &str, room: &str) {
 }
 
 /// 连接并加入房间 (重复调用会先断开旧连接)
+/// offset: 房间偏移秒数 (join_room 上报本端值; 服务器不以此覆盖房间 offset, 重连带旧值无害)
 #[tauri::command]
 pub async fn sync_connect(
     app: AppHandle,
     state: State<'_, Arc<SyncState>>,
     room: String,
+    offset: Option<u64>,
 ) -> Result<(), String> {
     // 结束旧连接: 丢弃旧 sender -> 旧任务 rx 收到 None 后关闭退出
     *state.tx.lock().unwrap() = None;
@@ -193,10 +195,11 @@ pub async fn sync_connect(
 
     let (tx, rx) = mpsc::channel::<Message>(32);
     *state.tx.lock().unwrap() = Some(tx.clone());
-    log(&format!("连接房间 {room}"));
+    log(&format!("连接房间 {room} (offset={:?})", offset));
     tauri::async_runtime::spawn(run(
         app,
         room,
+        offset.unwrap_or(0),
         rx,
         tx,
         session,
@@ -243,6 +246,7 @@ pub async fn sync_leave(state: State<'_, Arc<SyncState>>) -> Result<(), String> 
 async fn run(
     app: AppHandle,
     room: String,
+    offset: u64,
     mut rx: mpsc::Receiver<Message>,
     tx: mpsc::Sender<Message>,
     session: u64,
@@ -291,7 +295,7 @@ async fn run(
 
         let (mut sink, mut stream) = ws.split();
         let join = serde_json::json!({
-            "type": "join_room", "roomCode": room, "clientType": "timer", "offset": 0
+            "type": "join_room", "roomCode": room, "clientType": "timer", "offset": offset
         });
         if sink
             .send(Message::Text(join.to_string()))
