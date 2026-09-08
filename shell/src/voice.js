@@ -1,16 +1,22 @@
 // 声音提示: 三档 soundMode = "voice"(语音播报) | "beep"(提示音) | "mute"(静音)
 // 语音 = Audio 池预加载 wav (中英各一套, 按语言选用); 提示音 = Web Audio 合成 (无音频文件)
-import { BOSS, SKILLS } from "./skills.js";
+// 语音文件名约定: {boss}_{skillId}_ready.wav / {boss}_{skillId}_ready_en.wav
+// (窗口级 boss: 主窗口/悬浮窗各自在 preloadVoices 时锁定, 单窗口单 boss 无冲突)
+import { skillsOf, activeBossId } from "./bosses.js";
 import { locale } from "./i18n.js";
 
 const pools = { zh: new Map(), en: new Map() };
+let currentBoss = "auf";
 
 function keyOf(id, lang) {
-  return `${BOSS}_${id}_ready${lang === "en" ? "_en" : ""}`;
+  return `${currentBoss}_${id}_ready${lang === "en" ? "_en" : ""}`;
 }
 
 export function preloadVoices() {
-  for (const s of SKILLS) {
+  currentBoss = activeBossId();
+  pools.zh.clear();
+  pools.en.clear();
+  for (const s of skillsOf(currentBoss)) {
     for (const lang of ["zh", "en"]) {
       const a = new Audio(`/voices/${keyOf(s.id, lang)}.wav`);
       a.preload = "auto";

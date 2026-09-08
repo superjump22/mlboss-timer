@@ -3,13 +3,15 @@ import { computed, ref } from "vue";
 import { skillLabel } from "../i18n.js";
 
 const props = defineProps({
-  skill: Object, // {id,label,labelEn,cd,warn,color}
+  skill: Object, // {id,label,labelEn,cd,warn,color,nameable?}
   state: Object, // {phase:'idle'|'run'|'ready', remain}
   effcd: { type: Number, default: 0 }, // 含 offset 的有效 CD (未传/0 时用 skill.cd)
+  name: { type: String, default: "" }, // PB 可命名格子的自定义名字 (空 = 显示占位符)
 });
 const emit = defineEmits(["start", "reset"]);
 
-const label = computed(() => skillLabel(props.skill));
+// 有自定义名字显示名字, 否则按语言显示 label (PB 名字格的 label 即占位符 R1/TL1)
+const label = computed(() => props.name || skillLabel(props.skill));
 // idle/ready 显示值: offset 生效时为 max(5, 原始CD - offset)
 const eff = computed(() => (props.effcd > 0 ? props.effcd : props.skill.cd));
 

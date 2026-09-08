@@ -3,11 +3,10 @@
 // 锁定 = 背景点击穿透 + 不可拖 (格子/按钮仍可点); 解锁 = 全部可交互 + 背景拖拽
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import TimerCell from "./components/TimerCell.vue";
-import { SKILLS } from "./skills.js";
 import { BossSync } from "./sync.js";
 import { announceReady, announceReset, announceStart, preloadVoices, unlockAudio } from "./voice.js";
 import { locale, reloadLocale, t } from "./i18n.js";
-import { activeBossId } from "./bosses.js";
+import { BOSSES, skillsOf, activeBossId } from "./bosses.js";
 
 const isTauri = !!window.__TAURI__;
 const invoke = (cmd, args) =>
@@ -21,6 +20,40 @@ const boss = activeBossId();
 function lsGet(key, fallback) {
   return localStorage.getItem(`${key}_${boss}`) ?? localStorage.getItem(key) ?? fallback;
 }
+
+// ---- 技能集与分组布局 (AUF 单行 6 格零回归; PB/HT 12 格两行) ----
+const SKILLS = skillsOf(boss);
+// 分组装箱: 每行技能数上限 8 (AUF 4+2=6 单行; PB 4 | 5+3 两行; HT 6 | 4+2 两行)
+const CELL_ROW_CAP = 8;
+const rows = computed(() => {
+  const groups = BOSSES[boss]?.groups || [];
+  const rows = [];
+  let cur = [];
+  let curN = 0;
+  for (const g of groups) {
+    if (cur.length && curN + g.skills.length > CELL_ROW_CAP) {
+      rows.push(cur);
+      cur = [];
+      curN = 0;
+    }
+    cur.push(g);
+    curN += g.skills.length;
+  }
+  if (cur.length) rows.push(cur);
+  return rows;
+});
+
+// ---- PB 名字 (纯本地, 主窗口编辑; settings-changed 时刷新) ----
+const pbNames = ref({});
+function loadPbNames() {
+  try {
+    pbNames.value = JSON.parse(localStorage.getItem("pbNames") || "{}");
+  } catch {
+    pbNames.value = {};
+  }
+}
+loadPbNames();
+const nameOf = (s) => (s.nameable ? pbNames.value[s.id] || "" : "");
 
 // ---- 同步 (Rust WS 桥广播; 房间号从 localStorage 恢复) ----
 const sync = new BossSync();
@@ -65,12 +98,12 @@ function reloadAppearance() {
   soundMode.value = localStorage.getItem("soundMode") || "beep";
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
+  loadPbNames(); // PB 名字 (主窗口保存后刷新)
   // 尺寸上报由 watch(uiScale) 统一触发, 不手动调用 (避免 DOM 未 flush 测量旧值)
 }
 
 // ---- 计时操作 ----
-function start(idx) {
-  const s = SKILLS[idx];
+function start(s) {
   const st = starts[s.id];
   // 计时进行中单击无效 (防误触, 原版逻辑)
   if (st && st.cd - (syncNow() - st.startTs) / 1000 > 0) {
@@ -87,8 +120,7 @@ function start(idx) {
   announceStart(soundMode.value);
   focusGame();
 }
-function reset(idx) {
-  const s = SKILLS[idx];
+function reset(s) {
   delete starts[s.id];
   sync.resetAction(s.pid, effCd(s));
   announceReset(soundMode.value);
@@ -312,7 +344,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="overlaywin" :style="{ '--panel-alpha': panelOpacity }">
-    <!-- 计时面板: [锁] [主体×4] ┃ [分身×2] [多开][✕] -->
+    <!-- 计时面板: [锁] [分组×N (每行 ≤8 格, 组间分隔线)] [多开][✕] -->
     <div class="panel" :style="{ zoom: panelZoom }" @mousedown="onPanelMouseDown">
       <button
         class="lockbtn"
@@ -327,28 +359,24 @@ onBeforeUnmount(() => {
         </svg>
       </button>
 
-      <div class="cells" @mousedown.capture="onCellsDown">
-        <TimerCell
-          v-for="i in 4"
-          :key="SKILLS[i - 1].id"
-          :skill="SKILLS[i - 1]"
-          :state="stateOf(SKILLS[i - 1])"
-          :effcd="effCd(SKILLS[i - 1])"
-          @start="start(i - 1)"
-          @reset="reset(i - 1)"
-        />
-      </div>
-      <span class="gdiv" :title="t('groupMain')"></span>
-      <div class="cells" @mousedown.capture="onCellsDown">
-        <TimerCell
-          v-for="i in 2"
-          :key="SKILLS[i + 3].id"
-          :skill="SKILLS[i + 3]"
-          :state="stateOf(SKILLS[i + 3])"
-          :effcd="effCd(SKILLS[i + 3])"
-          @start="start(i + 3)"
-          @reset="reset(i + 3)"
-        />
+      <div class="rows">
+        <div v-for="(row, ri) in rows" :key="ri" class="row">
+          <template v-for="(g, gi) in row">
+            <span v-if="gi > 0" class="gdiv" :title="locale === 'en' && g.labelEn ? g.labelEn : g.label"></span>
+            <div class="cells" @mousedown.capture="onCellsDown">
+              <TimerCell
+                v-for="s in g.skills"
+                :key="s.id"
+                :skill="s"
+                :state="stateOf(s)"
+                :effcd="effCd(s)"
+                :name="nameOf(s)"
+                @start="start(s)"
+                @reset="reset(s)"
+              />
+            </div>
+          </template>
+        </div>
       </div>
 
       <button
@@ -407,6 +435,16 @@ body {
   border-radius: 10px;
   background: rgba(10, 12, 18, var(--panel-alpha, 0.85));
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .cells {
   display: flex;
