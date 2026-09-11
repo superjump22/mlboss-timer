@@ -225,13 +225,13 @@ const SOUND_OPTIONS = [
   { value: "beep", label: () => t("beep") },
   { value: "mute", label: () => t("mute") },
 ];
-// 就绪提示强度 (per-boss): low=闪3次(绿) | mid=持续闪 | high=计时进度条+就绪常亮
+// 就绪提示强度 (per-boss): high=计时进度条+闪3次(默认) | mid=持续闪 | low=仅闪3次
 const FX_OPTIONS = [
-  { value: "low", label: () => t("fxLow") },
-  { value: "mid", label: () => t("fxMid") },
   { value: "high", label: () => t("fxHigh") },
+  { value: "mid", label: () => t("fxMid") },
+  { value: "low", label: () => t("fxLow") },
 ];
-const readyFx = ref(lsGet("readyFx", "low"));
+const readyFx = ref(lsGet("readyFx", "high"));
 function setReadyFx(v) {
   readyFx.value = v;
   localStorage.setItem(`readyFx_${activeBoss.value}`, v);
@@ -257,7 +257,7 @@ function applyAppearance() {
 // 切 boss 后重读全部设置 (滑块/开关显示对应 boss 的值)
 function reloadBossSettings() {
   soundMode.value = lsGet("soundMode", "beep");
-  readyFx.value = lsGet("readyFx", "low");
+  readyFx.value = lsGet("readyFx", "high");
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
   timeFmtVal.value = timeFmtOf(activeBoss.value);
@@ -293,7 +293,7 @@ function setLocale(l) {
 }
 function resetDefaults() {
   soundMode.value = "beep";
-  setReadyFx("low");
+  setReadyFx("high");
   panelOpacity.value = 0.85;
   uiScale.value = 1;
   timeFmtVal.value = BOSSES[activeBoss.value]?.timeFmt || "ms"; // 恢复原版默认格式

@@ -141,7 +141,7 @@ function onClick() {
 .cell.fx-mid.ready {
   animation: glow-ready 0.8s ease-in-out infinite;
 }
-/* 高: 计时中 = 从上到下的绿色进度条 (--p = 剩余比例); 就绪 = 绿色常亮定格 */
+/* 高: 计时中 = 从上到下的绿色进度条 (--p = 剩余比例); 就绪 = 与低挡相同 (闪 3 次回落) */
 .cell.fx-high.run,
 .cell.fx-high.warn {
   background: linear-gradient(
@@ -150,9 +150,5 @@ function onClick() {
     rgba(255, 255, 255, 0.055) calc(var(--p, 1) * 100%)
   );
   transition: none; /* 填充逐秒平滑不必, 每 100ms 刷新; 过渡反而拖影 */
-}
-.cell.fx-high.ready {
-  background: rgba(74, 222, 128, 0.32);
-  box-shadow: 0 0 12px rgba(74, 222, 128, 0.4);
 }
 </style>
