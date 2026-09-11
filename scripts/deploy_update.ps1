@@ -54,9 +54,23 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 Write-Host "manifest: v$ver sha256=$($sha256.Substring(0,12))..."
 
 # ---- creds ----
+# env vars take precedence; fallback: read cos_credentials.txt (gitignored) so secrets
+# never appear on the command line. Format: "SecretId:<id>" / "SecretKey:<key>"
+if (!$env:COS_SECRET_ID -or !$env:COS_SECRET_KEY) {
+  $credFile = "$root\cos_credentials.txt"
+  if (Test-Path $credFile) {
+    foreach ($line in Get-Content $credFile) {
+      if ($line -match "^SecretId:(.+)$") { $env:COS_SECRET_ID = $Matches[1] }
+      elseif ($line -match "^SecretKey:(.+)$") { $env:COS_SECRET_KEY = $Matches[1] }
+    }
+  }
+}
 if ($env:COS_SECRET_ID -and $env:COS_SECRET_KEY) {
   coscmd config -a $env:COS_SECRET_ID -s $env:COS_SECRET_KEY -r $COS_REGION -b $COS_BUCKET
   if ($LASTEXITCODE -ne 0) { Write-Host "!! coscmd config failed" -ForegroundColor Red; exit 1 }
+} else {
+  Write-Host "!! no COS credentials (env COS_SECRET_ID/KEY or cos_credentials.txt)" -ForegroundColor Red
+  exit 1
 }
 
 # ---- upload ----
