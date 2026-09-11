@@ -95,6 +95,7 @@ const announced = new Set();
 
 // ---- 外观/声音 (全部 per-boss; 主窗口设置时经 settings-changed 通知) ----
 const soundMode = ref(lsGet("soundMode", "beep"));
+const readyFx = ref(lsGet("readyFx", "low")); // 就绪提示强度: low/mid/high
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
 // 游戏缩放系数 (Rust 下发 = 游戏客户区宽/1600); 面板总 zoom = uiScale × gameFactor × 0.8
@@ -105,6 +106,7 @@ const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FA
 function reloadAppearance() {
   reloadLocale(); // 语言/时间格式跟随主窗口设置 (per-boss)
   soundMode.value = lsGet("soundMode", "beep");
+  readyFx.value = lsGet("readyFx", "low");
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
   showSupport.value = lsGet("showSupport", "1") === "1"; // PB 支援技能开关
@@ -384,6 +386,7 @@ onBeforeUnmount(() => {
                 :effcd="effCd(s)"
                 :name="nameOf(s)"
                 :tint="g.tint || ''"
+                :fx="readyFx"
                 @start="start(s)"
                 @reset="reset(s)"
               />

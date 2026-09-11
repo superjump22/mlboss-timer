@@ -225,6 +225,18 @@ const SOUND_OPTIONS = [
   { value: "beep", label: () => t("beep") },
   { value: "mute", label: () => t("mute") },
 ];
+// 就绪提示强度 (per-boss): low=闪3次(绿) | mid=持续闪 | high=计时进度条+就绪常亮
+const FX_OPTIONS = [
+  { value: "low", label: () => t("fxLow") },
+  { value: "mid", label: () => t("fxMid") },
+  { value: "high", label: () => t("fxHigh") },
+];
+const readyFx = ref(lsGet("readyFx", "low"));
+function setReadyFx(v) {
+  readyFx.value = v;
+  localStorage.setItem(`readyFx_${activeBoss.value}`, v);
+  emit("settings-changed");
+}
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
 
@@ -245,6 +257,7 @@ function applyAppearance() {
 // 切 boss 后重读全部设置 (滑块/开关显示对应 boss 的值)
 function reloadBossSettings() {
   soundMode.value = lsGet("soundMode", "beep");
+  readyFx.value = lsGet("readyFx", "low");
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
   timeFmtVal.value = timeFmtOf(activeBoss.value);
@@ -280,6 +293,7 @@ function setLocale(l) {
 }
 function resetDefaults() {
   soundMode.value = "beep";
+  setReadyFx("low");
   panelOpacity.value = 0.85;
   uiScale.value = 1;
   timeFmtVal.value = BOSSES[activeBoss.value]?.timeFmt || "ms"; // 恢复原版默认格式
@@ -556,6 +570,20 @@ onMounted(async () => {
                   class="segbtn"
                   :class="{ active: soundMode === o.value }"
                   @click="setSoundMode(o.value)"
+                >
+                  {{ o.label() }}
+                </button>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">{{ t("readyFx") }}</span>
+              <div class="seg">
+                <button
+                  v-for="o in FX_OPTIONS"
+                  :key="o.value"
+                  class="segbtn"
+                  :class="{ active: readyFx === o.value }"
+                  @click="setReadyFx(o.value)"
                 >
                   {{ o.label() }}
                 </button>

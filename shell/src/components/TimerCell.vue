@@ -8,6 +8,7 @@ const props = defineProps({
   effcd: { type: Number, default: 0 }, // 含 offset 的有效 CD (未传/0 时用 skill.cd)
   name: { type: String, default: "" }, // PB 可命名格子的自定义名字 (空 = 显示占位符)
   tint: { type: String, default: "" }, // HT 部位背景色 (左手暖/中头紫/右手冷)
+  fx: { type: String, default: "low" }, // 就绪提示强度: low=闪3次 | mid=持续闪 | high=进度条
 });
 const emit = defineEmits(["start", "reset"]);
 
@@ -25,12 +26,28 @@ function fmt(sec) {
   return String(s);
 }
 
+// 高挡进度条: 剩余比例 0~1 (计时中实时; 驱动从上到下的绿色填充)
+const progress = computed(() => {
+  const s = props.state;
+  if (!s || s.phase !== "run") return null;
+  return Math.max(0, Math.min(1, s.remain / eff.value));
+});
+
 const display = computed(() => {
   const s = props.state;
   if (!s || s.phase === "idle") return { text: fmt(eff.value), cls: "idle" };
   if (s.phase === "ready") return { text: fmt(eff.value), cls: "ready" };
   if (s.remain <= props.skill.warn) return { text: fmt(Math.ceil(s.remain)), cls: "warn" };
   return { text: fmt(Math.ceil(s.remain)), cls: "run" };
+});
+
+// 背景策略: 高挡计时中 = 进度条 (--p 驱动); 就绪时让位给 CSS 就绪效果 (避免 tint 内联背景盖住高亮)
+const bgStyle = computed(() => {
+  const phase = props.state?.phase;
+  if (phase === "ready") return undefined;
+  if (progress.value !== null) return { "--p": progress.value };
+  if (props.tint) return { background: props.tint };
+  return undefined;
 });
 
 // 单击/双击判别: 260ms 内第二击 = 双击
@@ -53,8 +70,8 @@ function onClick() {
 <template>
   <div
     class="cell"
-    :class="[display.cls, { pressed }]"
-    :style="tint ? { background: tint } : undefined"
+    :class="[display.cls, { pressed }, fx !== 'low' ? `fx-${fx}` : '']"
+    :style="bgStyle"
     @mousedown="pressed = true"
     @mouseup="pressed = false"
     @mouseleave="pressed = false"
@@ -102,7 +119,7 @@ function onClick() {
   color: #eef0f4;
   font-variant-numeric: tabular-nums;
 }
-/* 预警: 红色呼吸 */
+/* 预警: 红色呼吸 (文字; 与进度条背景共存) */
 .cell.warn .time {
   animation: blink-warn 0.8s ease-in-out infinite;
 }
@@ -110,12 +127,32 @@ function onClick() {
   0%, 100% { color: #ff5c5c; text-shadow: 0 0 10px rgba(255, 92, 92, 0.55); }
   50% { color: rgba(255, 92, 92, 0.5); text-shadow: none; }
 }
-/* 就绪: 从静止开始闪 3 次 (红色警示), 结束后完全回落 */
+
+/* ---- 就绪提示强度 ---- */
+/* 低 (默认): 绿色高亮闪 3 次后回落 */
 .cell.ready {
   animation: glow-ready 0.8s ease-in-out 3;
 }
 @keyframes glow-ready {
   0%, 100% { background: rgba(255, 255, 255, 0.055); box-shadow: none; }
-  50% { background: rgba(255, 92, 92, 0.32); box-shadow: 0 0 12px rgba(255, 92, 92, 0.35); }
+  50% { background: rgba(74, 222, 128, 0.32); box-shadow: 0 0 12px rgba(74, 222, 128, 0.4); }
+}
+/* 中: 持续闪烁不回落 */
+.cell.fx-mid.ready {
+  animation: glow-ready 0.8s ease-in-out infinite;
+}
+/* 高: 计时中 = 从上到下的绿色进度条 (--p = 剩余比例); 就绪 = 绿色常亮定格 */
+.cell.fx-high.run,
+.cell.fx-high.warn {
+  background: linear-gradient(
+    to top,
+    rgba(74, 222, 128, 0.28) calc(var(--p, 1) * 100%),
+    rgba(255, 255, 255, 0.055) calc(var(--p, 1) * 100%)
+  );
+  transition: none; /* 填充逐秒平滑不必, 每 100ms 刷新; 过渡反而拖影 */
+}
+.cell.fx-high.ready {
+  background: rgba(74, 222, 128, 0.32);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.4);
 }
 </style>
