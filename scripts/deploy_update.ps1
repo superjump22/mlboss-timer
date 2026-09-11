@@ -4,11 +4,15 @@
 #   setup exe     -> CDN (versioned filename, 1-year cache is a feature, saves COS egress)
 #
 # Usage:   .\scripts\deploy_update.ps1 -NotesZh "<zh notes>" -NotesEn "<en notes>"
+#          .\scripts\deploy_update.ps1 -Beta ...        <- beta test: uploads setup exe ONLY, manifest untouched
+#                                                             (install manually from release\cos\)
+#          without -Beta = RELEASE: updates manifest -> ALL users get the update prompt. User approval required!
 # Creds:   env COS_SECRET_ID / COS_SECRET_KEY for this session (or run coscmd config once manually)
 # Depends: pip install coscmd
 param(
   [string]$NotesZh = "",
-  [string]$NotesEn = ""
+  [string]$NotesEn = "",
+  [switch]$Beta
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,7 +60,15 @@ if ($env:COS_SECRET_ID -and $env:COS_SECRET_KEY) {
 }
 
 # ---- upload ----
-Write-Host "uploading manifest.json + $setupName -> COS mlbosstimer/ ..."
+if ($Beta) {
+  # BETA: setup exe only. manifest stays on the current release -> users unaffected.
+  Write-Host "BETA deploy: uploading $setupName only (manifest untouched, users unaffected)"
+  coscmd upload "$stage\$setupName" "mlbosstimer/$setupName"
+  if ($LASTEXITCODE -ne 0) { Write-Host "!! setup upload failed" -ForegroundColor Red; exit 1 }
+  Write-Host "install manually from: $stage\$setupName" -ForegroundColor Green
+  exit 0
+}
+Write-Host "RELEASE deploy: uploading manifest.json + $setupName -> COS mlbosstimer/ ..."
 coscmd upload "$stage\manifest.json" "mlbosstimer/manifest.json"
 if ($LASTEXITCODE -ne 0) { Write-Host "!! manifest upload failed (coscmd configured?)" -ForegroundColor Red; exit 1 }
 coscmd upload "$stage\$setupName" "mlbosstimer/$setupName"
