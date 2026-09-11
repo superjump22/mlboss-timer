@@ -8,7 +8,8 @@ const props = defineProps({
   effcd: { type: Number, default: 0 }, // 含 offset 的有效 CD (未传/0 时用 skill.cd)
   name: { type: String, default: "" }, // PB 可命名格子的自定义名字 (空 = 显示占位符)
   tint: { type: String, default: "" }, // HT 部位背景色 (左手暖/中头紫/右手冷)
-  fx: { type: String, default: "low" }, // 就绪提示强度: low=闪3次 | mid=持续闪 | high=进度条
+  blinkLong: { type: Boolean, default: false }, // 就绪提示: false=闪3次 | true=持续闪烁
+  bar: { type: Boolean, default: true }, // 计时进度条 (计时中从上到下绿色填充)
 });
 const emit = defineEmits(["start", "reset"]);
 
@@ -26,10 +27,11 @@ function fmt(sec) {
   return String(s);
 }
 
-// 高挡进度条: 剩余比例 0~1 (计时中实时; 驱动从上到下的绿色填充)
+// 进度条: 剩余比例 0~1 (计时中实时, run/warn 阶段; 驱动从上到下的绿色填充)
 const progress = computed(() => {
   const s = props.state;
-  if (!s || s.phase !== "run") return null;
+  if (!props.bar || !s) return null;
+  if (s.phase !== "run") return null; // warn 阶段 cls=warn, 但 state.phase 仍为 run (cls 是 display 的)
   return Math.max(0, Math.min(1, s.remain / eff.value));
 });
 
@@ -70,7 +72,7 @@ function onClick() {
 <template>
   <div
     class="cell"
-    :class="[display.cls, { pressed }, fx !== 'low' ? `fx-${fx}` : '']"
+    :class="[display.cls, { pressed }, blinkLong ? 'blink-long' : '', bar ? 'has-bar' : '']"
     :style="bgStyle"
     @mousedown="pressed = true"
     @mouseup="pressed = false"
@@ -128,8 +130,8 @@ function onClick() {
   50% { color: rgba(255, 92, 92, 0.5); text-shadow: none; }
 }
 
-/* ---- 就绪提示强度 ---- */
-/* 低 (默认): 绿色高亮闪 3 次后回落 */
+/* ---- 就绪提示 (两维度) ---- */
+/* 就绪: 绿色高亮闪 3 次后回落 (默认) */
 .cell.ready {
   animation: glow-ready 0.8s ease-in-out 3;
 }
@@ -137,13 +139,13 @@ function onClick() {
   0%, 100% { background: rgba(255, 255, 255, 0.055); box-shadow: none; }
   50% { background: rgba(74, 222, 128, 0.32); box-shadow: 0 0 12px rgba(74, 222, 128, 0.4); }
 }
-/* 中: 持续闪烁不回落 */
-.cell.fx-mid.ready {
+/* 就绪持续闪烁 */
+.cell.blink-long.ready {
   animation: glow-ready 0.8s ease-in-out infinite;
 }
-/* 高: 计时中 = 从上到下的绿色进度条 (--p = 剩余比例); 就绪 = 与低挡相同 (闪 3 次回落) */
-.cell.fx-high.run,
-.cell.fx-high.warn {
+/* 计时进度条: 计时中从上到下的绿色填充 (--p = 剩余比例) */
+.cell.has-bar.run,
+.cell.has-bar.warn {
   background: linear-gradient(
     to top,
     rgba(74, 222, 128, 0.28) calc(var(--p, 1) * 100%),

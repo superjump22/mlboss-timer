@@ -225,16 +225,21 @@ const SOUND_OPTIONS = [
   { value: "beep", label: () => t("beep") },
   { value: "mute", label: () => t("mute") },
 ];
-// 就绪提示强度 (per-boss): high=计时进度条+闪3次(默认) | mid=持续闪 | low=仅闪3次
-const FX_OPTIONS = [
-  { value: "high", label: () => t("fxHigh") },
-  { value: "mid", label: () => t("fxMid") },
-  { value: "low", label: () => t("fxLow") },
+// 就绪提示两维度 (per-boss): 就绪闪烁方式 (闪3次/持续闪) + 计时进度条开关
+const BLINK_OPTIONS = [
+  { value: "blink3", label: () => t("fxBlink") },
+  { value: "blink-long", label: () => t("fxBlinkLong") },
 ];
-const readyFx = ref(lsGet("readyFx", "high"));
-function setReadyFx(v) {
-  readyFx.value = v;
-  localStorage.setItem(`readyFx_${activeBoss.value}`, v);
+const readyBlink = ref(lsGet("readyBlink", "blink3"));
+function setReadyBlink(v) {
+  readyBlink.value = v;
+  localStorage.setItem(`readyBlink_${activeBoss.value}`, v);
+  emit("settings-changed");
+}
+const readyBar = ref(lsGet("readyBar", "1") === "1");
+function setReadyBar(v) {
+  readyBar.value = v;
+  localStorage.setItem(`readyBar_${activeBoss.value}`, v ? "1" : "0");
   emit("settings-changed");
 }
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
@@ -257,7 +262,8 @@ function applyAppearance() {
 // 切 boss 后重读全部设置 (滑块/开关显示对应 boss 的值)
 function reloadBossSettings() {
   soundMode.value = lsGet("soundMode", "beep");
-  readyFx.value = lsGet("readyFx", "high");
+  readyBlink.value = lsGet("readyBlink", "blink3");
+  readyBar.value = lsGet("readyBar", "1") === "1";
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
   timeFmtVal.value = timeFmtOf(activeBoss.value);
@@ -293,7 +299,8 @@ function setLocale(l) {
 }
 function resetDefaults() {
   soundMode.value = "beep";
-  setReadyFx("high");
+  setReadyBlink("blink3");
+  setReadyBar(true);
   panelOpacity.value = 0.85;
   uiScale.value = 1;
   timeFmtVal.value = BOSSES[activeBoss.value]?.timeFmt || "ms"; // 恢复原版默认格式
@@ -579,14 +586,21 @@ onMounted(async () => {
               <span class="setlabel">{{ t("readyFx") }}</span>
               <div class="seg">
                 <button
-                  v-for="o in FX_OPTIONS"
+                  v-for="o in BLINK_OPTIONS"
                   :key="o.value"
                   class="segbtn"
-                  :class="{ active: readyFx === o.value }"
-                  @click="setReadyFx(o.value)"
+                  :class="{ active: readyBlink === o.value }"
+                  @click="setReadyBlink(o.value)"
                 >
                   {{ o.label() }}
                 </button>
+              </div>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">{{ t("fxBar") }}</span>
+              <div class="seg">
+                <button class="segbtn" :class="{ active: readyBar }" @click="setReadyBar(true)">{{ t("on") }}</button>
+                <button class="segbtn" :class="{ active: !readyBar }" @click="setReadyBar(false)">{{ t("off") }}</button>
               </div>
             </div>
             <div class="setrow">
