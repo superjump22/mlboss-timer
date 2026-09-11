@@ -95,8 +95,8 @@ const announced = new Set();
 
 // ---- 外观/声音 (全部 per-boss; 主窗口设置时经 settings-changed 通知) ----
 const soundMode = ref(lsGet("soundMode", "beep"));
-// 就绪提示两维度: 闪烁方式 (blink3=闪3次/blink-long=持续闪) + 计时进度条开关
-const readyBlink = ref(lsGet("readyBlink", "blink3"));
+// 就绪提示两维度: 闪烁方式 (blink-long=持续闪/blink3=闪3次) + 计时进度条开关
+const readyBlink = ref(lsGet("readyBlink", "blink-long"));
 const readyBar = ref(lsGet("readyBar", "1") === "1");
 const panelOpacity = ref(parseFloat(lsGet("panelOpacity", "0.85")));
 const uiScale = ref(parseFloat(lsGet("uiScale", "1")));
@@ -108,7 +108,7 @@ const panelZoom = computed(() => uiScale.value * gameFactor.value * BASE_SIZE_FA
 function reloadAppearance() {
   reloadLocale(); // 语言/时间格式跟随主窗口设置 (per-boss)
   soundMode.value = lsGet("soundMode", "beep");
-  readyBlink.value = lsGet("readyBlink", "blink3");
+  readyBlink.value = lsGet("readyBlink", "blink-long");
   readyBar.value = lsGet("readyBar", "1") === "1";
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));

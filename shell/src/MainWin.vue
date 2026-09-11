@@ -225,12 +225,12 @@ const SOUND_OPTIONS = [
   { value: "beep", label: () => t("beep") },
   { value: "mute", label: () => t("mute") },
 ];
-// 就绪提示两维度 (per-boss): 就绪闪烁方式 (闪3次/持续闪) + 计时进度条开关
+// 就绪提示两维度 (per-boss): 就绪闪烁方式 (持续闪/闪3次) + 计时进度条开关
 const BLINK_OPTIONS = [
-  { value: "blink3", label: () => t("fxBlink") },
   { value: "blink-long", label: () => t("fxBlinkLong") },
+  { value: "blink3", label: () => t("fxBlink") },
 ];
-const readyBlink = ref(lsGet("readyBlink", "blink3"));
+const readyBlink = ref(lsGet("readyBlink", "blink-long"));
 function setReadyBlink(v) {
   readyBlink.value = v;
   localStorage.setItem(`readyBlink_${activeBoss.value}`, v);
@@ -262,7 +262,7 @@ function applyAppearance() {
 // 切 boss 后重读全部设置 (滑块/开关显示对应 boss 的值)
 function reloadBossSettings() {
   soundMode.value = lsGet("soundMode", "beep");
-  readyBlink.value = lsGet("readyBlink", "blink3");
+  readyBlink.value = lsGet("readyBlink", "blink-long");
   readyBar.value = lsGet("readyBar", "1") === "1";
   panelOpacity.value = parseFloat(lsGet("panelOpacity", "0.85"));
   uiScale.value = parseFloat(lsGet("uiScale", "1"));
@@ -299,7 +299,7 @@ function setLocale(l) {
 }
 function resetDefaults() {
   soundMode.value = "beep";
-  setReadyBlink("blink3");
+  setReadyBlink("blink-long");
   setReadyBar(true);
   panelOpacity.value = 0.85;
   uiScale.value = 1;
