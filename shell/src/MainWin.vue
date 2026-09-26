@@ -613,7 +613,7 @@ onMounted(async () => {
             <div class="setrow">
               <span class="setlabel">{{ t("scale") }}</span>
               <div class="sliderbox">
-                <input v-model.number="uiScale" type="range" min="0.5" max="1.5" step="0.05" @input="applyAppearance" />
+                <input v-model.number="uiScale" type="range" min="0.5" max="4" step="0.05" @input="applyAppearance" />
                 <span class="sliderval">{{ Math.round(uiScale * 100) }}%</span>
               </div>
             </div>
