@@ -321,7 +321,13 @@ const updateProg = ref({ received: 0, total: 0 });
 let setupPath = "";
 
 if (isTauri) {
-  window.__TAURI__.app.getVersion().then((v) => (version.value = v)).catch(() => {});
+  window.__TAURI__.app
+    .getVersion()
+    .then((v) => {
+      version.value = v;
+      checkAnnounce(v);
+    })
+    .catch(() => {});
 }
 async function doCheckUpdate() {
   if (!isTauri) return;
@@ -358,6 +364,27 @@ function installNow() {
 }
 function openGitHub() {
   invoke("open_url", { url: RELEASES_URL });
+}
+
+// ---- 版本公告: 当前版本首次打开时弹更新内容 ----
+const RELEASE_NOTES = {
+  "1.3.1": {
+    zh: ["新增：更新后首次打开时显示更新内容", "界面缩放范围扩大到 50% ~ 400%"],
+    en: ["New: shows what's new on first launch after an update", "UI scale range extended to 50% - 400%"],
+  },
+};
+const showAnnounce = ref(false);
+const announceItems = ref([]);
+function checkAnnounce(v) {
+  const notes = RELEASE_NOTES[v.split("-")[0]]; // 剥离 -beta.N 后缀
+  if (notes && localStorage.getItem("announcedVersion") !== v) {
+    announceItems.value = notes[locale.value === "en" ? "en" : "zh"];
+    showAnnounce.value = true;
+  }
+}
+function dismissAnnounce() {
+  localStorage.setItem("announcedVersion", version.value);
+  showAnnounce.value = false;
 }
 const updateNotes = computed(
   () => (locale.value === "en" ? updateInfo.value?.notes_en : updateInfo.value?.notes_zh) || ""
@@ -669,6 +696,19 @@ onMounted(async () => {
           </div>
         </div>
       </template>
+    </div>
+    <!-- 版本公告 (当前版本首次打开时弹出) -->
+    <div v-if="showAnnounce" class="announce-mask" @click.self="dismissAnnounce">
+      <div class="announce-card">
+        <div class="announce-head">
+          <span class="announce-badge">v{{ version.split("-")[0] }}</span>
+          <span class="announce-title">{{ t("whatsNewTitle") }}</span>
+        </div>
+        <ul class="announce-list">
+          <li v-for="(item, i) in announceItems" :key="i">{{ item }}</li>
+        </ul>
+        <button class="btn announce-btn" @click="dismissAnnounce">{{ t("whatsNewBtn") }}</button>
+      </div>
     </div>
   </div>
 </template>
@@ -1124,6 +1164,58 @@ input {
   margin-top: 8px; /* 与上方设置行拉开间距 */
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.07); /* 视觉分组: 操作收尾区 */
+}
+
+/* ---- 版本公告弹窗 (当前版本首次打开) ---- */
+.announce-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(5, 7, 11, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.announce-card {
+  width: min(400px, calc(100vw - 48px));
+  padding: 20px 22px 18px;
+  border-radius: 14px;
+  background: #161a26;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.announce-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.announce-badge {
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(74, 222, 128, 0.15);
+  color: #86efac;
+}
+.announce-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.announce-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+.announce-btn {
+  align-self: flex-end;
 }
 
 /* ---- PB 名字编辑 (R 5 列 / TL 3 列 分组) ---- */
