@@ -369,8 +369,8 @@ function openGitHub() {
 // ---- 版本公告: 当前版本首次打开时弹更新内容 ----
 const RELEASE_NOTES = {
   "1.3.1": {
-    zh: ["新增：更新后首次打开时显示更新内容", "界面缩放范围扩大到 50% ~ 400%"],
-    en: ["New: shows what's new on first launch after an update", "UI scale range extended to 50% - 400%"],
+    zh: ["界面缩放范围扩大到 50% ~ 400%"],
+    en: ["UI scale range extended to 50% - 400%"],
   },
 };
 const showAnnounce = ref(false);
